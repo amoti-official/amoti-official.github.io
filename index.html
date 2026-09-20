@@ -4169,6 +4169,7 @@ refreshFilterSelects();
   function renderStorageDiag() {
   const anchor = document.getElementById('btnWipe');
   if (!anchor) return;
+  try { ensureFollowSyncCard(); } catch (e) {}
   const host = anchor.closest('.card');
   if (!host) return;
   let raw = null; try { raw = localStorage.getItem(KEY); } catch (e) {}
@@ -4207,6 +4208,72 @@ refreshFilterSelects();
   if (rl) rl.onclick = () => location.reload();
 }
 setInterval(() => { try { renderStorageDiag(); } catch (e) {} }, 900);
+/* ---------- フォロワー数の自動取込（外部JSONを読み込んでアカウントを自動更新） ---------- */
+function fuNorm(x) {
+  return String(x || '').toLowerCase().trim()
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/^https?:\/\/(www\.)?tiktok\.com\/@?/, '')
+    .replace(/^https?:\/\/(www\.)?youtube\.com\/@?/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, '')
+    .replace(/^@/, '').replace(/[?#].*$/, '').replace(/\/.*$/, '').trim();
+}
+function fuParse(j) {
+  const out = [];
+  const push = (h, v, dt) => { const n = Number(v); if (h && !isNaN(n) && n > 0) out.push({ handle: h, followers: n, date: dt || '' }); };
+  if (Array.isArray(j)) j.forEach(x => push(x.handle || x.username || x.url || x.account || x.name, x.followers, x.date));
+  else if (j && Array.isArray(j.accounts)) j.accounts.forEach(x => push(x.handle || x.username || x.url || x.account || x.name, x.followers, x.date));
+  else if (j && typeof j === 'object') Object.keys(j).forEach(k => { const v = j[k]; if (v && typeof v === 'object') push(k, v.followers, v.date); else push(k, v, ''); });
+  return out;
+}
+async function syncFollowers(manual) {
+  const url = String(((DB.api || {}).followUrl) || '').trim();
+  const msg = document.getElementById('fuMsg');
+  const say = (h, cls) => { if (msg) msg.innerHTML = '<div class="callout' + (cls ? ' ' + cls : '') + '">' + h + '</div>'; };
+  if (!url) { if (manual) toast('取込先URLを入力してください'); return; }
+  try {
+    if (manual) say('読み込んでいます…');
+    const r = await fetch(url + (url.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const list = fuParse(j);
+    if (!list.length) throw new Error('データが空です');
+    const rows = []; let n = 0;
+    list.forEach(it => {
+      const key = fuNorm(it.handle);
+      const acc = DB.accounts.find(a => fuNorm(a.handle) === key || fuNorm(a.url) === key || fuNorm(profileUrl(a)) === key);
+      if (!acc) return;
+      const v = Math.round(it.followers), cur = Number(acc.followers) || 0;
+      if (v !== cur) { acc.followers = v; recordFollow(acc.id, v, it.date || ymd(TODAY)); n++; rows.push(esc(acc.name) + '：' + nf(cur) + ' → ' + nf(v)); }
+    });
+    DB.api.lastFollowSync = ymd(TODAY);
+    save(); render();
+    if (n) { toast('フォロワー数を ' + n + ' 件更新しました'); say('<b>' + n + ' 件のアカウントを更新しました</b><br>' + rows.join('<br>'), ''); }
+    else say('すべて最新でした（' + ymd(TODAY) + ' 時点・JSON内 ' + list.length + ' 件を確認）', '');
+  } catch (e) {
+    say('取込できませんでした：' + esc(String((e && e.message) || e)) + '（公開JSONか・CORSが許可されているかをご確認ください）', 'warn');
+  }
+}
+function ensureFollowSyncCard() {
+  const anchor = document.getElementById('btnWipe');
+  if (!anchor) return;
+  const host = anchor.closest('.card'); if (!host) return;
+  if (document.getElementById('followSyncCard')) return;
+  const card = document.createElement('div'); card.className = 'card'; card.id = 'followSyncCard'; card.style.marginTop = '18px';
+  card.innerHTML = '<div class="card-h"><h2>フォロワー数の自動取込</h2><span class="hint">外部JSONを読み込んで自動更新</span></div>' +
+    '<div class="card-b">' +
+    '<div class="field"><label>取込先JSONのURL</label><div class="inline">' +
+    '<input id="fuUrl" placeholder="https://raw.githubusercontent.com/…/followers.json" style="flex:1 1 220px" value="' + esc(((DB.api || {}).followUrl) || '') + '">' +
+    '<button type="button" class="btn primary" id="fuNow">今すぐ取込</button></div></div>' +
+    '<div class="callout" style="margin-top:10px">JSON形式：<code>[{"handle":"@moguo.osaka","followers":1500,"date":"2026-09-20"}]</code>（<code>{"accounts":[…]}</code>・<code>{"moguo.osaka":1500}</code> でも可）。取り込むと<b>アカウントのフォロワー数が書き換わり</b>、フォロワー推移にも記録されます。URLはこの端末に保存されます。</div>' +
+    '<div id="fuMsg" style="margin-top:10px;font-size:12px"></div>' +
+    '<div style="font-size:10.5px;color:var(--cha);margin-top:8px">毎朝などに自動更新したい場合は、GensparkのワークフローでJSONを作り、そのURLをここに貼ってください（アプリを開いた日に1回だけ自動で取り込みます）。</div>' +
+    '</div>';
+  host.parentNode.insertBefore(card, host);
+  const inp = document.getElementById('fuUrl');
+  const saveUrl = () => { const k = apiKeys(); k.followUrl = inp.value.trim(); save(); };
+  inp.onchange = saveUrl; inp.oninput = saveUrl;
+  document.getElementById('fuNow').onclick = () => { saveUrl(); syncFollowers(true); };
+}
+setTimeout(() => { try { if (String(((DB.api || {}).followUrl) || '').trim() && ((DB.api || {}).lastFollowSync || '') !== ymd(TODAY)) syncFollowers(false); } catch (e) {} }, 1800);
+
 
 go(VIEW_TITLES[h] ? h : 'dash');
   authGate();
