@@ -718,6 +718,13 @@ html{zoom:.7}
   .lg-top-logout:active{transform:translateY(1px) scale(.97)}
 }
 </style>
+<style>
+/* AMOTI：モーダルの操作ボタンは横並び（登録する → キャンセル） */
+.modal-b .field.wide.inline{flex-direction:row!important;align-items:stretch;justify-content:flex-end;flex-wrap:wrap}
+.modal-b .field.wide.inline .btn{width:auto;flex:0 1 auto;justify-content:center;white-space:nowrap}
+.act-row{display:flex;flex-direction:row!important;align-items:stretch;gap:10px;justify-content:flex-end;padding-top:6px}
+.act-row .btn{flex:1 1 0;width:auto;min-width:0;justify-content:center;white-space:nowrap;text-align:center}
+</style>
 </head>
 <body>
 <div class="app">
@@ -2212,118 +2219,7 @@ function ocrNameCandidate(data) {
   return rows.filter(r => r.h >= cut).slice(0, 6).map(r => r.t).join(' ').replace(/\s+/g, ' ').trim().slice(0, 60);
 }
 /* リンク → スクショAI読込 → アカウント登録 を1画面で行う */
-function openSnScan(platform) {
-  openModal('SNSからアカウント登録', `<form id="snForm" class="fgrid">
-    <div class="field wide"><div class="callout">
-      <b>① リンクを貼る → ② SNSページを開く → ③ スクショを貼る → ④ 登録</b><br>
-      リンクから媒体とハンドルを自動で入れ、スクショから表示名とフォロワー数を読み取ります。読み取り結果は確認・修正してください。
-    </div></div>
-    <div class="field wide"><label>① プロフィールのリンク</label>
-      <div class="inline">
-        <input id="snLink" style="flex:1 1 240px" placeholder="https://www.instagram.com/moguo.osaka/?hl=ja">
-        <button type="button" class="btn" id="snLinkBtn">リンクから取込</button>
-      </div>
-      <div id="snLinkMsg" style="font-size:10.5px;color:var(--cha);margin-top:4px">貼り付けると媒体・ハンドルを自動で入れます</div>
-    </div>
-    <div class="field wide"><label>② SNSページ</label>
-      <div class="inline">
-        <button type="button" class="btn" id="snOpen" disabled>SNSページを開く</button>
-        <span id="snUrl" style="font-size:11.5px;color:var(--cha);word-break:break-all">リンクを先に取り込んでください</span>
-      </div></div>
-    <div class="field wide"><label>③ スクリーンショットからAI読込</label>
-      <div class="ins-drop" id="snDrop">クリックして画像を選択 ／ ここにドロップ ／ Ctrl+V で貼り付け</div>
-      <input type="file" id="snFile" accept="image/*" style="display:none"></div>
-    <div class="field wide" id="snStat"></div>
-    <div class="field wide"><label>読取候補（タップで入力）</label>
-      <div class="pd-seg" id="snCands"><span style="font-size:11.5px;color:var(--cha)">まだ読み取っていません</span></div></div>
-    <div class="field"><label>表示名 *</label><input name="name" id="snName" required placeholder="もぐお🍚｜大阪グルメ・関西グルメ"></div>
-    <div class="field"><label>ハンドル</label><input name="handle" id="snHandle" placeholder="@moguo.osaka"></div>
-    <div class="field"><label>媒体</label><select name="platform" id="snPlat">${PLATFORMS.map(p => `<option ${p === (platform || 'Instagram') ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
-    <div class="field"><label>フォロワー数</label><input name="followers" id="snFoll" type="number" min="0"></div>
-    <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
-      <button type="button" class="btn ghost" id="snCancel">キャンセル</button>
-      <button type="submit" class="btn primary">この内容で登録する</button>
-    </div></form>`);
-  const form = document.getElementById('snForm');
-  const stat = h => { const el = document.getElementById('snStat'); if (el) el.innerHTML = h; };
-  document.getElementById('snCancel').onclick = closeModal;
-  const linkIn = document.getElementById('snLink');
-  const setLink = () => {
-    const r = parseProfileUrl(linkIn.value);
-    const msg = document.getElementById('snLinkMsg');
-    if (!r) { msg.innerHTML = '<span style="color:var(--shu)">URLからアカウントを判別できませんでした（例：https://www.instagram.com/handle/）</span>'; return; }
-    document.getElementById('snPlat').value = r.platform;
-    document.getElementById('snHandle').value = '@' + r.handle;
-    const u = profileUrl({ platform: r.platform, handle: r.handle });
-    document.getElementById('snUrl').textContent = u;
-    const op = document.getElementById('snOpen');
-    op.disabled = false; op.onclick = () => window.open(u, '_blank', 'noopener');
-    const dup = DB.accounts.filter(a => String(a.handle || '').replace(/^@/, '').toLowerCase() === r.handle.toLowerCase())[0];
-    msg.innerHTML = '<span style="color:var(--mori-3)">取り込みました：' + esc(r.platform) + ' / @' + esc(r.handle) + '</span>'
-      + (dup ? '　※ 登録済み（' + esc(dup.name) + '）を更新します' : '');
-  };
-  document.getElementById('snLinkBtn').onclick = setLink;
-  linkIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); setLink(); } };
-  linkIn.onpaste = () => setTimeout(setLink, 30);
 
-  const runShot = async f => {
-    if (!f) return;
-    stat('<span style="color:var(--cha)">画像を準備しています…</span>');
-    try {
-      const data = await ocrRun(f, stat, { lang: 'jpn+eng', scale: 3 });
-      const cands = ocrFollowerCandidates(data);
-      const nm = ocrNameCandidate(data);
-      const nEl = document.getElementById('snName'), fEl = document.getElementById('snFoll');
-      if (nm && !nEl.value.trim()) nEl.value = nm;
-      if (cands.length && !fEl.value) fEl.value = cands[0];
-      const box = document.getElementById('snCands');
-      box.innerHTML = cands.length
-        ? cands.map(v => `<button type="button" class="btn ghost" data-snc="${v}" style="font-size:12px">${nf(v)}</button>`).join('')
-        : '<span style="font-size:11.5px;color:var(--cha)">数字を読み取れませんでした（手入力してください）</span>';
-      Array.prototype.forEach.call(box.querySelectorAll('[data-snc]'), b => b.onclick = () => { fEl.value = b.dataset.snc; toast(nf(Number(b.dataset.snc)) + ' を入力しました'); });
-      stat('<span style="color:var(--mori-3)">読み取り完了。表示名・フォロワー数を確認してください' + (nm ? '' : '（表示名は読み取れませんでした）') + '</span>');
-    } catch (e) {
-      stat('<span style="color:var(--shu)">読み取りに失敗しました：' + esc(e.message || '不明なエラー') + '（数値は手入力できます）</span>');
-    }
-  };
-  const drop = document.getElementById('snDrop'), fi = document.getElementById('snFile');
-  drop.onclick = () => fi.click();
-  fi.onchange = () => runShot(fi.files && fi.files[0]);
-  ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
-  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('on'); }));
-  drop.addEventListener('drop', e => { const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) runShot(f); });
-  document.addEventListener('paste', ev => {
-    const it = ev.clipboardData && ev.clipboardData.items;
-    if (!it) return;
-    for (let i = 0; i < it.length; i++) { if (it[i].type && it[i].type.indexOf('image') === 0) { runShot(it[i].getAsFile()); break; } }
-  });
-
-  form.onsubmit = e => {
-    e.preventDefault();
-    const v = n => form.elements[n].value;
-    const handle = v('handle').trim();
-    const platform = v('platform');
-    const name = v('name').trim();
-    const followers = Number(v('followers')) || 0;
-    if (!name) { toast('表示名を入力してください'); return; }
-    const key = handle.replace(/^@/, '').toLowerCase();
-    let a = key ? DB.accounts.filter(x => String(x.handle || '').replace(/^@/, '').toLowerCase() === key)[0] : null;
-    const today = ymd(TODAY);
-    if (a) {
-      a.name = name; a.handle = handle; a.platform = platform;
-      if (followers > 0) a.followers = followers;
-      toast('既存アカウントを更新しました');
-    } else {
-      a = { id: uid('a'), name: name, handle: handle, platform: platform, genre: '', followers: followers, er: 0, growth: 0, note: '' };
-      DB.accounts.push(a);
-      toast('アカウントを登録しました');
-    }
-    if (followers > 0) recordFollow(a.id, followers, today);
-    save(); closeModal(); render();
-    go('account'); openAccountDetail(a.id);
-  };
-}
-/* スクショからフォロワー数を読み取って記録する */
 function openFollowShot(aid) {
   const a = accById(aid); if (!a) { toast('アカウントを選んでください'); return; }
   const url = profileUrl(a);
@@ -2568,49 +2464,108 @@ function renderAccounts() {
         <td class="num r">${avg ? yen(avg) + (unit ? ` <span style="font-size:10.5px;color:${unit < 2 ? 'var(--shu)' : unit > 4 ? 'var(--kohaku)' : 'var(--ok)'}">(${unit.toFixed(1)}円)</span>` : '') : '—'}</td></tr>`;
     }).join('')}</tbody></table>` : emptyBox('アカウント未登録');
 }
-function openAccount(id) {
+function openAccount(id, presetPlatform) {
   const a = id ? accById(id) : null;
-  const d = Object.assign({ id: '', name: '', handle: '', platform: 'Instagram', genre: '', followers: '', er: '', growth: '', note: '' }, a || {});
+  const d = Object.assign({ id: '', name: '', handle: '', platform: presetPlatform || 'Instagram', genre: '', followers: '', er: '', growth: '', note: '' }, a || {});
   openModal(a ? 'アカウントを編集' : 'アカウントを登録', `<form id="accForm" class="fgrid">
-    <div class="field wide"><label>プロフィールのリンクから取込</label>
+    <div class="field wide"><div class="callout">
+      <b>SNSのURLを貼る</b>か<b>スクリーンショットを添付</b>すると、AIが読み取って下の欄に自動で入れます。<br>
+      読み取り結果を確認・修正してから登録できます。
+    </div></div>
+    <div class="field wide"><label>SNSのURL</label>
       <div class="inline">
         <input id="accLink" placeholder="https://www.instagram.com/moguo.osaka/?hl=ja" style="flex:1 1 240px">
         <button type="button" class="btn" id="accLinkBtn">取込</button>
       </div>
-      <div style="font-size:10.5px;color:var(--cha);margin-top:4px">媒体・ハンドル・表示名を自動で入れます（フォロワー数はSNS側の取得制限があるため手入力してください）</div>
+      <div id="accLinkMsg" style="font-size:10.5px;color:var(--cha);margin-top:4px">貼り付けると媒体・ハンドルを自動で入れます</div>
     </div>
-    <div class="field wide"><button type="button" class="btn primary" id="accScan" style="width:100%">リンク＋スクショから自動登録する</button></div>
-    <div class="field"><label>表示名 *</label><input name="name" required value="${esc(d.name)}" placeholder="まい｜東京グルメ"></div>
-    <div class="field"><label>ハンドル</label><input name="handle" value="${esc(d.handle)}" placeholder="@tokyo_gurmet_mai"></div>
+    <div class="field wide"><label>スクリーンショット</label>
+      <div class="ins-drop" id="accDrop">クリックして画像を選択 ／ ここにドロップ ／ Ctrl+V で貼り付け</div>
+      <input type="file" id="accFile" accept="image/*" style="display:none"></div>
+    <div class="field wide" id="accStat"></div>
+    <div class="field wide" id="accRead"></div>
+    <div class="field wide" id="accCands"></div>
+    <div class="field"><label>表示名 *</label><input name="name" required value="${esc(d.name)}" placeholder="もぐお｜大阪グルメ"></div>
+    <div class="field"><label>ハンドル</label><input name="handle" value="${esc(d.handle)}" placeholder="@moguo.osaka"></div>
     <div class="field"><label>媒体</label><select name="platform">${PLATFORMS.map(p => `<option ${p === d.platform ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
     <div class="field"><label>ジャンル</label><input name="genre" value="${esc(d.genre)}" placeholder="ラーメン / スイーツ / カフェ"></div>
     <div class="field"><label>フォロワー数</label><input name="followers" type="number" min="0" value="${esc(d.followers)}"></div>
     <div class="field"><label>公表ER（%）</label><input name="er" type="number" step="0.1" min="0" value="${esc(d.er)}"></div>
     <div class="field"><label>月間の伸び（%）</label><input name="growth" type="number" step="0.1" value="${esc(d.growth)}"></div>
     <div class="field wide"><label>メモ</label><input name="note" value="${esc(d.note)}" placeholder="伸びている型・注意点"></div>
-    <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
-      ${a ? `<button type="button" class="btn shu" id="acDelete">削除</button>` : ''}
-      <button type="button" class="btn ghost" id="acCancel">キャンセル</button>
+    <div class="field wide act-row">
       <button type="submit" class="btn primary">${a ? '保存する' : '登録する'}</button>
+      <button type="button" class="btn ghost" id="acCancel">キャンセル</button>
+      ${a ? '<button type="button" class="btn shu" id="acDelete">削除</button>' : ''}
     </div></form>`);
   const form = document.getElementById('accForm');
+  const RD = { url: false, shot: false, nameSrc: '' };
+  const stat = h => { const el = document.getElementById('accStat'); if (el) el.innerHTML = h; };
+  const paint = () => {
+    const el = document.getElementById('accRead'); if (!el) return;
+    const f = n => form.elements[n].value.trim();
+    if (!RD.url && !RD.shot) { el.innerHTML = '<div class="callout">まだ読み取っていません。上の<b>URL取込</b>か<b>スクリーンショット</b>で自動入力できます。</div>'; return; }
+    const row = (k, v, tag) => '<tr><th style="text-align:left;width:96px;color:var(--cha);font-weight:600;padding:5px 0">' + k + '</th><td style="padding:5px 6px">' + v + '</td><td style="text-align:right;padding:5px 0;font-size:11px;color:var(--cha)">' + tag + '</td></tr>';
+    const na = '<span style="color:var(--cha)">未取得</span>';
+    el.innerHTML = '<div class="callout ok"><b>AIの読み取り結果</b>：違っていれば下の欄で直してください。</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px">'
+      + row('表示名', f('name') ? esc(f('name')) : na, RD.nameSrc || '手入力')
+      + row('ハンドル', f('handle') ? esc(f('handle')) : na, RD.url ? 'URLから' : '手入力')
+      + row('媒体', esc(form.elements['platform'].value), RD.url ? 'URLから' : '手入力')
+      + row('フォロワー数', f('followers') ? nf(Number(f('followers'))) + '人' : na, RD.shot ? 'スクショから' : '手入力')
+      + '</table>';
+  };
   document.getElementById('acCancel').onclick = closeModal;
   const linkIn = document.getElementById('accLink');
-  if (linkIn) {
-    const take = () => {
-      const r = parseProfileUrl(linkIn.value);
-      if (!r) { toast('URLからアカウントを判別できませんでした'); return; }
-      form.elements['platform'].value = r.platform;
-      form.elements['handle'].value = '@' + r.handle;
-      if (!form.elements['name'].value.trim()) form.elements['name'].value = r.handle;
-      toast(r.platform + ' / @' + r.handle + ' を取り込みました');
-    };
-    document.getElementById('accLinkBtn').onclick = take;
-    linkIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); take(); } };
-    linkIn.onpaste = () => setTimeout(take, 30);
-    const scanBtn = document.getElementById('accScan');
-    if (scanBtn) scanBtn.onclick = () => { const pl = form.elements['platform'].value; closeModal(); openSnScan(pl); };
-  }
+  const take = () => {
+    const r = parseProfileUrl(linkIn.value);
+    const msg = document.getElementById('accLinkMsg');
+    if (!r) { msg.innerHTML = '<span style="color:var(--shu)">URLからアカウントを判別できませんでした（例：https://www.instagram.com/handle/）</span>'; return; }
+    form.elements['platform'].value = r.platform;
+    form.elements['handle'].value = '@' + r.handle;
+    if (!form.elements['name'].value.trim()) { form.elements['name'].value = r.handle; RD.nameSrc = 'URL（ハンドル）から'; }
+    RD.url = true;
+    const dup = DB.accounts.filter(x => String(x.handle || '').replace(/^@/, '').toLowerCase() === r.handle.toLowerCase() && (!a || x.id !== a.id))[0];
+    msg.innerHTML = '<span style="color:var(--mori-3)">取り込みました：' + esc(r.platform) + ' / @' + esc(r.handle) + '</span>' + (dup ? '　※ 登録済み（' + esc(dup.name) + '）を更新します' : '');
+    paint();
+  };
+  document.getElementById('accLinkBtn').onclick = take;
+  linkIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); take(); } };
+  linkIn.onpaste = () => setTimeout(take, 30);
+  const runShot = async f => {
+    if (!f) return;
+    stat('<span style="color:var(--cha)">スクリーンショットを読み取っています…</span>');
+    try {
+      const data = await ocrRun(f, stat, { lang: 'jpn+eng', scale: 3 });
+      const cands = ocrFollowerCandidates(data);
+      const nm = ocrNameCandidate(data);
+      if (nm && !form.elements['name'].value.trim()) { form.elements['name'].value = nm; RD.nameSrc = 'スクショから'; }
+      if (cands.length && !form.elements['followers'].value) form.elements['followers'].value = cands[0];
+      RD.shot = true;
+      const box = document.getElementById('accCands');
+      box.innerHTML = cands.length
+        ? '<label style="font-size:11.5px;color:var(--cha)">フォロワー数の候補（タップで入力）</label><div class="pd-seg" style="margin-top:6px">'
+          + cands.map(v => '<button type="button" class="btn ghost" data-snc="' + v + '" style="font-size:12px">' + nf(v) + '</button>').join('') + '</div>'
+        : '';
+      Array.prototype.forEach.call(box.querySelectorAll('[data-snc]'), b => b.onclick = () => {
+        form.elements['followers'].value = b.dataset.snc; RD.shot = true; paint(); toast(nf(Number(b.dataset.snc)) + '人 を入れました');
+      });
+      stat('<span style="color:var(--mori-3)">読み取り完了。内容を確認してください' + (nm ? '' : '（表示名は読み取れませんでした。手入力してください）') + '</span>');
+      paint();
+    } catch (e) {
+      stat('<span style="color:var(--shu)">読み取りに失敗しました：' + esc(e.message || '不明なエラー') + '（下の欄に手入力できます）</span>');
+    }
+  };
+  window.__accShot = runShot;
+  const drop = document.getElementById('accDrop'), fi = document.getElementById('accFile');
+  drop.onclick = () => fi.click();
+  fi.onchange = () => runShot(fi.files && fi.files[0]);
+  ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('on'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('on'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) runShot(f); });
+  ['name', 'handle', 'followers'].forEach(n => { form.elements[n].addEventListener('input', paint); });
+  form.elements['platform'].addEventListener('change', paint);
+  paint();
   const del = document.getElementById('acDelete');
   if (del) del.onclick = () => {
     if (!confirm('関連する案件・投稿ログごと削除されます。よろしいですか？')) return;
@@ -2627,12 +2582,33 @@ function openAccount(id) {
       const pu = parseProfileUrl(rawH);
       if (pu) { form.elements['platform'].value = pu.platform; form.elements['handle'].value = '@' + pu.handle; }
     }
-    const data = { name: v('name').trim(), handle: v('handle').trim(), platform: v('platform'), genre: v('genre').trim(),
+    const name = v('name').trim();
+    if (!name) { toast('表示名を入力してください'); return; }
+    const data = { name: name, handle: v('handle').trim(), platform: v('platform'), genre: v('genre').trim(),
       followers: Number(v('followers')) || 0, er: Number(v('er')) || 0, growth: Number(v('growth')) || 0, note: v('note').trim() };
-    if (a) Object.assign(a, data); else DB.accounts.push(Object.assign({ id: uid('a') }, data));
-    save(); closeModal(); render(); toast(a ? '更新しました' : '登録しました');
+    let target = a;
+    if (target) Object.assign(target, data);
+    else {
+      target = Object.assign({ id: uid('a') }, data);
+      DB.accounts.push(target);
+      if (data.followers > 0) recordFollow(target.id, data.followers, ymd(TODAY));
+    }
+    save(); closeModal(); render();
+    toast(a ? '更新しました' : 'アカウントを登録しました');
+    if (!a) { go('account'); openAccountDetail(target.id); }
   };
 }
+/* スクリーンショットを Ctrl+V で貼り付けたらアカウント登録モーダルに取り込む */
+document.addEventListener('paste', ev => {
+  if (!document.getElementById('accDrop')) return;
+  const it = ev.clipboardData && ev.clipboardData.items; if (!it) return;
+  for (let i = 0; i < it.length; i++) {
+    if (it[i].type && it[i].type.indexOf('image') === 0) {
+      const f = it[i].getAsFile();
+      if (f && window.__accShot) { window.__accShot(f); break; }
+    }
+  }
+});
 
 /* =========================================================================
    サイドバーのアカウント一覧 / モバイル帯
@@ -3545,7 +3521,7 @@ document.getElementById('btnBrief2').onclick = openBrief;
 document.getElementById('btnCopyJson').onclick = () => copyText(JSON.stringify(DB), 'JSONをコピーしました');
 document.getElementById('btnAddAccount').onclick = () => openAccount(null);
 const _btnScanAcc = document.getElementById('btnScanAccount');
-if (_btnScanAcc) _btnScanAcc.onclick = () => openSnScan();
+if (_btnScanAcc) _btnScanAcc.onclick = () => openAccount(null);
 document.getElementById('btnAddPost').onclick = () => postForm(null);
 
 document.getElementById('btnExportJson').onclick = () => {
