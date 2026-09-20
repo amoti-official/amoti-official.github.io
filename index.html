@@ -695,7 +695,7 @@ html{zoom:.7}
 @media (max-width:860px){
   .rail{flex-direction:column;align-items:stretch;gap:7px;padding:9px 9px calc(9px + env(safe-area-inset-bottom));}
   .rail-primary,.rail-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%;padding:0;border:0;background:transparent;overflow:visible}
-  .nav-btn[data-view="schedule"],.nav-btn[data-view="insights"],.nav-btn[data-view="data"]{display:none}
+  .nav-btn[data-view="schedule"],.nav-btn[data-view="insights"]{display:none}
   .nav-btn[data-view="campaigns"]{order:1}
   .nav-btn[data-view="alerts"]{order:2}
   .nav-btn[data-view="dash"]{order:3}
@@ -743,7 +743,6 @@ html{zoom:.7}
       <button class="nav-btn" data-view="accounts" data-m="アカウント" data-s="媒体"><span class="lb">アカウント</span></button>
       <button class="nav-btn" data-view="insights" data-s="分析"><span class="lb">投稿インサイト</span></button>
       <button class="nav-btn" data-view="trends" data-m="トレンド" data-s="情報"><span class="lb">トレンド・仕様変更</span></button>
-      <button class="nav-btn" data-view="data" data-s="データ"><span class="lb">データ管理</span></button>
       <button class="nav-btn" data-view="admin" data-m="管理情報" data-s="管理"><span class="lb">管理情報</span></button>
     </nav>
     <div class="rail-foot">
@@ -1054,21 +1053,16 @@ html{zoom:.7}
     <section class="view" id="view-admin" hidden>
       <div class="sec-title">
         <span class="no">09</span><h2>管理情報</h2>
-        <span class="note">ログイン情報と振込口座</span>
+        <span class="note">ログイン情報・振込先・データ管理</span>
       </div>
       <div class="sec-title" style="margin-top:22px"><span class="no">09.1</span><h2>ログイン情報</h2><span class="note">ID とパスワードの変更</span></div>
       <div class="card"><div class="card-b" id="authForm"></div></div>
       <div class="sec-title" style="margin-top:26px"><span class="no">09.2</span><h2>口座情報（振込先）</h2><span class="note">請求書にそのまま印字されます</span></div>
       <div class="card"><div class="card-b" id="bankForm"></div></div>
-    </section>
 
-    <!-- ---------- 06 データ管理 ---------- -->
-    <section class="view" id="view-data" hidden>
-      <div class="sec-title">
-        <span class="no">08</span><h2>データ管理</h2>
-        <span class="note">この端末のブラウザに保存されています</span>
-      </div>
+
       <div class="grid g-3" id="dataStats"></div>
+      <   <div class="grid g-3" id="dataStats"></div>
       <div class="sec-title" style="margin-top:26px"><span class="no">08.1</span><h2>請求書の発行者情報</h2><span class="note">請求書PDFにそのまま印字されます</span></div>
       <div class="card"><div class="card-b" id="profForm"></div></div>
 
@@ -1092,7 +1086,6 @@ html{zoom:.7}
             <button class="btn" id="btnExportCampCsv">案件CSVを書き出す</button>
             <label class="btn" style="cursor:pointer">JSONを読み込む
               <input type="file" id="fileImport" accept=".json" hidden></label>
-            <button class="btn ghost" id="btnSeed">サンプルデータを再投入</button>
             <button class="btn shu" id="btnWipe">すべて消去</button>
           </div>
           <div class="callout warn" style="margin-top:16px">
@@ -1463,7 +1456,6 @@ const VIEW_TITLES = {
   accounts:  ['アカウント台帳', '複数アカウントの資産を俯瞰'],
   insights:  ['投稿インサイト', 'どの投稿が効いたかを数字で'],
   trends:    ['トレンド・仕様変更', '2026年のSNS仕様と企画ネタ'],
-  data:      ['データ管理', 'バックアップと移行'],
   admin:     ['管理情報', 'ログイン情報と振込口座']
 };
 function go(view) {
@@ -2027,7 +2019,7 @@ function openInvoice(id) {
     </div>
     ${(c.invoiceHistory || []).length ? `<div class="callout" style="margin-top:12px"><b>請求書の履歴</b>　${c.invoiceHistory.map(h => `${esc(h.no)}（${esc(h.issuedAt || '—')} / ${yen(h.total)}）`).join(' → ')} → <b>${esc(c.invoice)}</b></div>` : ''}`);
   document.getElementById('invPrint').onclick = () => printDoc(invoiceBody(c), '請求書 ' + c.invoice);
-  document.getElementById('invProf').onclick = () => { closeModal(); go('data'); };
+  document.getElementById('invProf').onclick = () => { closeModal(); go('admin'); };
   const ag = document.getElementById('invAgain');
   if (ag) ag.onclick = () => {
     c.invoiceHistory = c.invoiceHistory || [];
@@ -3414,7 +3406,7 @@ function render() {
   if (active === 'accounts') renderAccounts();
   if (active === 'insights') renderInsights();
   if (active === 'trends') renderTrends();
-  if (active === 'data') renderData();
+  if (active === 'admin') renderData();
   if (active === 'admin') renderAdmin();
   if (active === 'account') renderAccountDetail();
   if (active === 'schedule') renderSchedule();
@@ -3596,10 +3588,6 @@ document.getElementById('fileImport').addEventListener('change', e => {
   };
   r.readAsText(f); e.target.value = '';
 });
-document.getElementById('btnSeed').onclick = () => {
-  if (!confirm('サンプルデータで置き換えます。現在の入力内容は消えます。よろしいですか？')) return;
-  DB = seed(); save(); refreshFilterSelects(); render(); toast('サンプルデータを投入しました');
-};
 document.getElementById('btnWipe').onclick = () => {
   if (!confirm('すべてのデータを消去します。元に戻せません。よろしいですか？')) return;
   DB = { accounts: [], campaigns: [], posts: [], checks: {}, v: 1 };
