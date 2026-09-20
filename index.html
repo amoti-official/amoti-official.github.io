@@ -725,6 +725,20 @@ html{zoom:.7}
 .act-row{display:flex;flex-direction:row!important;align-items:stretch;gap:10px;justify-content:flex-end;padding-top:6px}
 .act-row .btn{flex:1 1 0;width:auto;min-width:0;justify-content:center;white-space:nowrap;text-align:center}
 </style>
+<style>
+/* AMOTI：アカウントのアイコン画像 */
+.av{overflow:hidden}
+.av img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+.ic-wrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.ic-box{position:relative;width:180px;height:180px;flex:0 0 auto;border-radius:50%;overflow:hidden;border:2px dashed var(--line);
+  background:linear-gradient(180deg,#FFFFFF,#FFF3F7);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ic-box.on{border-color:var(--mori-3)}
+.ic-box canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.ic-hint{font-size:11px;color:var(--cha);text-align:center;line-height:1.5;padding:0 14px}
+.ic-ctl{flex:1 1 220px;min-width:190px}
+.ic-ctl input[type=range]{width:100%;accent-color:var(--mori-3)}
+@media (max-width:680px){.ic-box{width:150px;height:150px}}
+</style>
 </head>
 <body>
 <div class="app">
@@ -1442,6 +1456,11 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 /* ---------- ナビ ---------- */
 let currentView = 'campaigns';
 let currentAccount = null;
+const avHTML = a => {
+  const ic = a && a.icon ? String(a.icon) : '';
+  if (/^data:image\//.test(ic)) return '<img src="' + ic + '" alt="">';
+  return esc(initials(a));
+};
 const initials = a => (String(a.name || '').replace(/^[｜|\s]+/, '').slice(0, 1)) || String(a.platform || '?').slice(0, 2);
 
 const VIEW_TITLES = {
@@ -2573,6 +2592,22 @@ function openAccount(id, presetPlatform) {
     <div class="field wide"><label>スクリーンショット</label>
       <div class="ins-drop" id="accDrop">クリックして画像を選択 ／ ここにドロップ ／ Ctrl+V で貼り付け</div>
       <input type="file" id="accFile" accept="image/*" style="display:none"></div>
+    <div class="field wide"><label>アイコン画像</label>
+      <div class="ic-wrap">
+        <div class="ic-box" id="icBox"><span class="ic-hint" id="icHint">クリックして画像を選択<br>／ ここにドロップ ／ Ctrl+V</span>
+          <canvas id="icCv" width="360" height="360" style="display:none"></canvas></div>
+        <input type="file" id="icFile" accept="image/*" style="display:none">
+        <div class="ic-ctl">
+          <label style="font-size:12.5px;font-weight:700;color:var(--sumi)">サイズ調整</label>
+          <input type="range" id="icZoom" min="1" max="3" step="0.01" value="1">
+          <div class="inline" style="margin-top:10px">
+            <button type="button" class="btn" id="icPick">画像を選ぶ</button>
+            <button type="button" class="btn ghost" id="icClear">画像を削除</button>
+          </div>
+          <div style="font-size:10.5px;color:var(--cha);margin-top:8px">枠の中をドラッグすると位置を調整できます。正方形に切り抜いて保存します（自動で縮小）。</div>
+        </div>
+      </div>
+    </div>
     <div class="field wide" id="accStat"></div>
     <div class="field wide" id="accRead"></div>
     <div class="field wide" id="accCands"></div>
@@ -2735,6 +2770,70 @@ function openAccount(id, presetPlatform) {
   ['name', 'handle', 'followers'].forEach(n => { form.elements[n].addEventListener('input', paint); });
   form.elements['platform'].addEventListener('change', paint);
   paint();
+  /* ---------- アイコン画像（選択・サイズ調整・保存） ---------- */
+  const icBox = document.getElementById('icBox'), icCv = document.getElementById('icCv');
+  const icHint = document.getElementById('icHint'), icZoom = document.getElementById('icZoom');
+  const icCtx = icCv.getContext('2d');
+  const ICS = icCv.width;
+  const IC = { img: null, scale: 1, ox: 0, oy: 0 };
+  let icRemoved = false;
+  const icRect = () => {
+    const iw = IC.img.width, ih = IC.img.height;
+    const cov = Math.max(ICS / iw, ICS / ih) * IC.scale;
+    const w = iw * cov, h = ih * cov;
+    let x = (ICS - w) / 2 + IC.ox, y = (ICS - h) / 2 + IC.oy;
+    x = Math.min(0, Math.max(ICS - w, x)); y = Math.min(0, Math.max(ICS - h, y));
+    return { x, y, w, h };
+  };
+  const icDraw = () => {
+    icCtx.clearRect(0, 0, ICS, ICS);
+    icCtx.fillStyle = '#FFF3F7'; icCtx.fillRect(0, 0, ICS, ICS);
+    if (!IC.img) { icCv.style.display = 'none'; if (icHint) icHint.style.display = ''; return; }
+    icCv.style.display = 'block'; if (icHint) icHint.style.display = 'none';
+    const r = icRect();
+    icCtx.drawImage(IC.img, r.x, r.y, r.w, r.h);
+  };
+  const icExport = () => {
+    if (!IC.img) return '';
+    const OUT = 200, o = document.createElement('canvas'); o.width = OUT; o.height = OUT;
+    const c = o.getContext('2d');
+    c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, OUT, OUT);
+    const r = icRect(), k = OUT / ICS;
+    c.drawImage(IC.img, r.x * k, r.y * k, r.w * k, r.h * k);
+    return o.toDataURL('image/jpeg', 0.86);
+  };
+  const icLoad = (f) => {
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      const im = new Image();
+      im.onload = () => { IC.img = im; IC.scale = 1; IC.ox = 0; IC.oy = 0; icZoom.value = 1; icRemoved = false; icDraw(); };
+      im.onerror = () => toast('画像を読み込めませんでした');
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(f);
+  };
+  const icFile = document.getElementById('icFile');
+  icBox.onclick = () => { if (!IC.img) icFile.click(); };
+  document.getElementById('icPick').onclick = () => icFile.click();
+  icFile.onchange = () => icLoad(icFile.files && icFile.files[0]);
+  document.getElementById('icClear').onclick = () => { IC.img = null; icRemoved = true; icZoom.value = 1; icDraw(); toast('アイコンを削除しました（保存で確定）'); };
+  icZoom.oninput = () => { IC.scale = Number(icZoom.value) || 1; icDraw(); };
+  ['dragover', 'dragenter'].forEach(ev => icBox.addEventListener(ev, e => { e.preventDefault(); icBox.classList.add('on'); }));
+  ['dragleave', 'drop'].forEach(ev => icBox.addEventListener(ev, e => { e.preventDefault(); icBox.classList.remove('on'); }));
+  icBox.addEventListener('drop', e => { const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) icLoad(f); });
+  let icDrag = null;
+  const icPos = e => { const r = icCv.getBoundingClientRect(); return { x: (e.clientX - r.left) * (ICS / r.width), y: (e.clientY - r.top) * (ICS / r.height) }; };
+  icCv.addEventListener('pointerdown', e => { if (!IC.img) return; icDrag = icPos(e); icCv.setPointerCapture(e.pointerId); });
+  icCv.addEventListener('pointermove', e => {
+    if (!icDrag || !IC.img) return;
+    const q = icPos(e); IC.ox += q.x - icDrag.x; IC.oy += q.y - icDrag.y; icDrag = q; icDraw();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => icCv.addEventListener(ev, () => { icDrag = null; }));
+  if (d.icon) { const im0 = new Image(); im0.onload = () => { IC.img = im0; icDraw(); }; im0.src = d.icon; }
+  icDraw();
+  window.__accIcon = () => (IC.img ? icExport() : (icRemoved ? '' : null));
+
   const del = document.getElementById('acDelete');
   if (del) del.onclick = () => {
     if (!confirm('関連する案件・投稿ログごと削除されます。よろしいですか？')) return;
@@ -2755,6 +2854,8 @@ function openAccount(id, presetPlatform) {
     if (!name) { toast('表示名を入力してください'); return; }
     const data = { name: name, handle: v('handle').trim(), platform: v('platform'), genre: v('genre').trim(),
       followers: Number(v('followers')) || 0, er: Number(v('er')) || 0, growth: Number(v('growth')) || 0, note: v('note').trim() };
+    const icOut = window.__accIcon ? window.__accIcon() : null;
+    if (icOut !== null) data.icon = icOut;
     let target = a;
     if (target) Object.assign(target, data);
     else {
@@ -2781,7 +2882,7 @@ function renderRailAccounts() {
   const list = document.getElementById('railAccounts');
   if (list) list.innerHTML = rows.length ? rows.map(r => `
     <button class="acc-btn ${r.on ? 'on' : ''}" data-acc-open="${esc(r.a.id)}" title="${esc(r.a.name)}">
-      <span class="av">${esc(initials(r.a))}</span>
+      <span class="av">${avHTML(r.a)}</span>
       <span class="t"><b>${esc(r.a.name)}</b><span>${esc(r.sub)}</span></span>
     </button>`).join('')
     : '<div style="font-size:11.5px;color:#9DB5AC;padding:4px 6px 2px">アカウント未登録</div>';
@@ -2789,7 +2890,7 @@ function renderRailAccounts() {
   const chips = `<button class="acc-chip ${currentView !== 'account' ? 'on' : ''}" data-view-jump="accounts">
       <span class="av">全</span><b>すべて</b><small>${DB.accounts.length}</small></button>`
     + rows.map(r => `<button class="acc-chip ${r.on ? 'on' : ''}" data-acc-open="${esc(r.a.id)}">
-      <span class="av">${esc(initials(r.a))}</span><b>${esc(r.a.name)}</b><small>${esc(r.a.platform)}</small></button>`).join('');
+      <span class="av">${avHTML(r.a)}</span><b>${esc(r.a.name)}</b><small>${esc(r.a.platform)}</small></button>`).join('');
   ['stripCamps', 'stripAcc'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = chips; });
 }
 
