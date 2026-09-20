@@ -1641,6 +1641,16 @@ function campPosts(c) {
     return !base || !d || Math.abs(d - base) <= 12096e5;     /* 案件日の前後14日以内 */
   });
 }
+function campInsight(c) {
+  const m = campPosts(c);
+  return {
+    posts: m,
+    reach: m.reduce((s, p) => s + (Number(p.reach) || 0), 0),
+    saves: m.reduce((s, p) => s + (Number(p.saves) || 0), 0),
+    shares: m.reduce((s, p) => s + (Number(p.shares) || 0), 0),
+    er: m.length ? m.reduce((s, p) => s + metrics(p).er, 0) / m.length : 0
+  };
+}
 function recDetail(c) {
   const m = campInsight(c);
   return `<tr class="rec-detail"><td colspan="10"><div class="rec-panel">
