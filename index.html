@@ -1278,16 +1278,19 @@ if (!DB.dataRev || DB.dataRev < 2) {
   save();
   if (had) setTimeout(() => { try { toast('保存済みのデータ ' + had + '件を引き継ぎました'); } catch (e) {} }, 1200);
 }
+let storeRaw = null, storeIssue = '';
 function load() {
   try {
-    if (window.__PV && window.__PV.db) return normalize(window.__PV.db);
+    if (window.__PV && window.__PV.db) { storeIssue = 'preview'; return normalize(window.__PV.db); }
     const raw = localStorage.getItem(KEY);
-    if (!raw) return normalize(seed());
+    storeRaw = raw;
+    if (!raw) { storeIssue = 'empty'; return normalize(seed()); }
     const d = JSON.parse(raw);
-    if (!d || !Array.isArray(d.accounts)) return normalize(seed());
+    if (!d || !Array.isArray(d.accounts)) { storeIssue = 'shape'; return normalize(seed()); }
     d.checks = d.checks || {};
+    storeIssue = 'ok';
     return normalize(d);
-  } catch (e) { return normalize(seed()); }
+  } catch (e) { storeIssue = 'broken:' + ((e && e.message) || 'parse error'); return normalize(seed()); }
 }
 /* 旧データの移行：単一アカウント → 複数アカウント / 7ステータス → 3ステータス / 請求書の発行者情報 */
 function normalize(d) {
@@ -1309,7 +1312,7 @@ function storageOK() {
 }
 function save() {
   if (window.__PV) return;   // プレビュー内の操作は保存しない
-  try { localStorage.setItem(KEY, JSON.stringify(DB)); }
+  try { DB.savedAt = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(DB)); }
   catch (e) {
     if (!_storeWarned) {
       _storeWarned = true;
@@ -1865,7 +1868,12 @@ function renderCampaigns() {
     + (hiddenList.length ? '／ 非表示: ' + hiddenList.slice(0, 3).map(c => campTitle(c)).join('、') + (hiddenList.length > 3 ? ` ほか${hiddenList.length - 3}件` : '') + ' → 上の「見送り案件」や絞り込みを解除すると表示されます' : '');
 
   const box = document.getElementById('campRecords');
-  if (!list.length) { box.innerHTML = emptyBox('条件に合う案件がありません。右上の「＋ 案件を登録」から追加できます。'); return; }
+  if (!list.length) {
+    box.innerHTML = emptyBox(DB.campaigns.length
+      ? '条件に合う案件がありません。絞り込みを解除するか、右上の「＋ 案件を登録」から追加できます。'
+      : 'この端末には案件データがありません。データは端末ごとに保存され、PCとは自動同期しません。右上の「＋ 案件を登録」で追加するか、管理情報の「JSONを読み込む」でPCのバックアップを復元できます。');
+    return;
+  }
   box.innerHTML = `<table class="rec-table">
     <thead><tr>
       <th style="width:30px"></th>
@@ -4150,7 +4158,49 @@ refreshFilterSelects();
 (function boot() {
   authInit();
   const h = (location.hash || '').replace('#', '');
-  go(VIEW_TITLES[h] ? h : 'dash');
+  function renderStorageDiag() {
+  const anchor = document.getElementById('btnWipe');
+  if (!anchor) return;
+  const host = anchor.closest('.card');
+  if (!host) return;
+  let raw = null; try { raw = localStorage.getItem(KEY); } catch (e) {}
+  const bytes = raw ? raw.length : 0;
+  const sig = [bytes, (DB.accounts || []).length, (DB.campaigns || []).length, (DB.posts || []).length, storeIssue, DB.savedAt || ''].join('|');
+  let card = document.getElementById('diagCard');
+  if (!card) { card = document.createElement('div'); card.className = 'card'; card.id = 'diagCard'; card.style.marginTop = '18px'; host.parentNode.insertBefore(card, host); }
+  if (card.dataset.sig === sig) return;
+  card.dataset.sig = sig;
+  const issueTxt = storeIssue === 'ok' ? '正常に読み込みました（この端末のデータを表示中）'
+    : storeIssue === 'empty' ? 'この端末には保存データがありません（未登録、または別端末で登録したデータは引き継がれません）'
+    : storeIssue === 'shape' ? '保存データの形式が想定と違うため、読み込めませんでした'
+    : storeIssue === 'preview' ? 'プレビュー枠の中の表示です（保存は行われません）'
+    : storeIssue ? '保存データを読み込めませんでした：' + storeIssue
+    : '—';
+  card.innerHTML = `<div class="card-h"><h2>この端末の保存データ</h2><span class="hint">PC・スマホ間で自動同期しません</span></div>
+  <div class="card-b">
+    <div class="rec-grid" style="margin-bottom:10px">
+      <div><span class="k">保存キー</span><b>${esc(KEY)}</b></div>
+      <div><span class="k">生データ量</span><b>${bytes ? nf(bytes) + ' 文字' : 'なし'}</b></div>
+      <div><span class="k">アカウント</span><b>${nf((DB.accounts || []).length)} 件</b></div>
+      <div><span class="k">案件</span><b>${nf((DB.campaigns || []).length)} 件</b></div>
+      <div><span class="k">投稿ログ</span><b>${nf((DB.posts || []).length)} 本</b></div>
+      <div><span class="k">最終保存</span><b>${DB.savedAt ? esc(jDT(DB.savedAt)) : '—'}</b></div>
+    </div>
+    <div class="callout${storeIssue === 'ok' ? '' : ' warn'}"><b>読み込み状態：</b>${esc(issueTxt)}</div>
+    <div class="inline" style="margin-top:12px">
+      <button class="btn sm" id="diagCopy">生データをコピー</button>
+      <button class="btn sm ghost" id="diagReload">再読み込み</button>
+    </div>
+    <div class="callout warn" style="margin-top:12px">データは<b>この端末のブラウザ内にのみ</b>保存されます。別の端末とは自動で同期しません。移すときは「JSONを書き出す」→ 移行先で「JSONを読み込む」を行ってください。</div>
+  </div>`;
+  const cp = document.getElementById('diagCopy');
+  if (cp) cp.onclick = () => { let r = null; try { r = localStorage.getItem(KEY); } catch (e) {} if (!r) { toast('この端末に保存データはありません'); return; } copyText(r, '端末の保存データをコピーしました'); };
+  const rl = document.getElementById('diagReload');
+  if (rl) rl.onclick = () => location.reload();
+}
+setInterval(() => { try { renderStorageDiag(); } catch (e) {} }, 900);
+
+go(VIEW_TITLES[h] ? h : 'dash');
   authGate();
   setTimeout(() => { if (!document.getElementById('loginOv')) followDailyCheck(); }, 700);
 })();
