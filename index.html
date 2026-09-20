@@ -2120,6 +2120,7 @@ function ocrInsightItems(data) {
   ocrWords(data).forEach(w => {
     if (!w.bbox) return;
     const raw = String(w.text || '').trim();
+    if (/[A-Za-z]/.test(raw)) return;   /* 英字まじり（"9A220" 等）は誤読なので除外 */
     const h = w.bbox.y1 - w.bbox.y0;
     if (h < 10) return;
     const dash = /^[-\u2013\u2014\u2212\u30fc]{1,3}$/.test(raw);
@@ -2129,6 +2130,7 @@ function ocrInsightItems(data) {
       v = parseFloat(t.replace(/[^0-9.,]/g, '').replace(/[,.](?=\d{3}\b)/g, '').replace(/,/g, ''));
       if (!isFinite(v)) return;
       if (t.indexOf('\u4e07') >= 0) v = v * 10000;
+      if (v > 99999999) return;
     }
     cands.push({ v: Math.round(v), raw, h, y: w.bbox.y0, cx: (w.bbox.x0 + w.bbox.x1) / 2 });
   });
