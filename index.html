@@ -1272,8 +1272,11 @@ const PROF_DEF = { issuer:'', title:'', zip:'', address:'', tel:'', email:'', re
 let DB = load();
 /* デモデータ撤去：この端末に保存済みのデータからもアカウント・案件を消す（初回のみ） */
 if (!DB.dataRev || DB.dataRev < 2) {
-  DB.accounts = []; DB.campaigns = []; DB.posts = []; DB.followLog = {}; DB.dataRev = 2;
+  /* 版上げ。以前はここで全データを消していたため、端末内の登録が消える事故がありました。実データは消しません。 */
+  const had = (DB.accounts || []).length + (DB.campaigns || []).length + (DB.posts || []).length;
+  DB.dataRev = 2;
   save();
+  if (had) setTimeout(() => { try { toast('保存済みのデータ ' + had + '件を引き継ぎました'); } catch (e) {} }, 1200);
 }
 function load() {
   try {
