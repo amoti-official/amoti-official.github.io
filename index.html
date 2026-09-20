@@ -2241,6 +2241,8 @@ function insightAssign(items) {
   return { o, slots };
 }
 function profileUrl(a) {
+  const raw = String(a.url || '').trim();
+  if (raw) return raw;
   const h = String(a.handle || '').replace(/^@/, '').trim();
   if (!h) return '';
   switch (a.platform) {
@@ -2651,6 +2653,7 @@ function renderAccounts() {
           <div class="chip">${esc(a.platform)}</div>
           <h3 style="font-size:14.5px;font-weight:900;margin-top:6px;line-height:1.45">${esc(a.name)}</h3>
           <div class="num" style="font-size:11px;color:var(--cha)">${esc(a.handle)}</div>
+          ${(a.url || profileUrl(a)) ? `<div class="num" style="font-size:10.5px;margin-top:3px;word-break:break-all"><a href="${esc(a.url || profileUrl(a))}" target="_blank" rel="noopener" style="color:var(--mori-3);text-decoration:underline">${esc(a.url || profileUrl(a))}</a></div>` : ''}
         </div>
         <button class="btn sm ghost" data-edit-acc="${esc(a.id)}">編集</button>
       </div>
@@ -2787,7 +2790,7 @@ function openAccount(id, presetPlatform) {
     </div></div>
     <div class="field wide"><label>SNSのURL</label>
       <div class="inline">
-        <input id="accLink" placeholder="https://www.instagram.com/moguo.osaka/?hl=ja" style="flex:1 1 200px">
+        <input id="accLink" name="url" value="${esc(d.url || profileUrl(d) || '')}" placeholder="https://www.instagram.com/moguo.osaka/?hl=ja" style="flex:1 1 200px">
         <button type="button" class="btn" id="accLinkBtn">ページを確認して取込</button>
         <button type="button" class="btn ghost" id="accOpenPage" disabled>プロフィールを開く</button>
       </div>
@@ -2843,6 +2846,10 @@ function openAccount(id, presetPlatform) {
   };
   document.getElementById('acCancel').onclick = closeModal;
   const linkIn = document.getElementById('accLink');
+  (function () {
+    const op0 = document.getElementById('accOpenPage');
+    if (op0 && linkIn.value.trim()) { op0.disabled = false; op0.onclick = () => window.open(linkIn.value.trim(), '_blank', 'noopener'); }
+  })();
   const fetchPage = async r => {
     const url = profileUrl({ platform: r.platform, handle: r.handle });
     if (r.platform === 'TikTok') {
@@ -3054,7 +3061,7 @@ function openAccount(id, presetPlatform) {
     if (!name) { toast('表示名を入力してください'); return; }
     const keepS = n => (form.elements[n] ? form.elements[n].value.trim() : (a ? String(a[n] || '') : ''));
     const keepN = n => (form.elements[n] ? (Number(form.elements[n].value) || 0) : (a ? (Number(a[n]) || 0) : 0));
-    const data = { name: name, handle: v('handle').trim(), platform: v('platform'),
+    const data = { url: (document.getElementById('accLink') ? document.getElementById('accLink').value.trim() : ''), name: name, handle: v('handle').trim(), platform: v('platform'),
       genre: keepS('genre'), followers: Number(v('followers')) || 0,
       er: keepN('er'), growth: keepN('growth'), note: keepS('note') };
     const icOut = window.__accIcon ? window.__accIcon() : null;
@@ -3273,6 +3280,7 @@ function renderAccountDetail() {
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
       <div class="kpi" style="padding-left:0;border-left:0"><div class="k">媒体</div><div class="v" style="font-size:16px;font-family:var(--sans);font-weight:900">${esc(a.platform)}</div></div>
       <div class="kpi"><div class="k">ハンドル</div><div class="v" style="font-size:16px;font-family:var(--mono)">${esc(a.handle || '—')}</div></div>
+      <div class="kpi" style="grid-column:1/-1"><div class="k">SNSのURL</div><div class="v" style="font-size:12.5px;font-family:var(--mono);word-break:break-all">${(a.url || profileUrl(a)) ? `<a href="${esc(a.url || profileUrl(a))}" target="_blank" rel="noopener" style="color:var(--mori-3);text-decoration:underline">${esc(a.url || profileUrl(a))}</a>` : '—'}</div></div>
       <div class="kpi"><div class="k">ジャンル</div><div class="v" style="font-size:16px;font-family:var(--sans);font-weight:900">${esc(a.genre || '—')}</div></div>
       <div class="kpi"><div class="k">フォロワー</div><div class="v" style="font-size:16px">${nf(a.followers)}</div></div>
     </div>
