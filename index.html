@@ -71,7 +71,7 @@ input,select,textarea{font:inherit;color:inherit}
   width:236px;flex:0 0 236px;
   background:
     linear-gradient(180deg,var(--mori) 0%,#0F3A30 100%);
-  color:#DCE8E2;
+  color:#F6E3E8;
   display:flex;flex-direction:column;
   position:sticky;top:0;height:100vh;
 }
@@ -93,7 +93,7 @@ input,select,textarea{font:inherit;color:inherit}
 .nav-btn{
   display:flex;align-items:center;gap:10px;width:100%;text-align:left;
   background:transparent;border:0;border-radius:8px;
-  padding:11px 12px;font-size:13.5px;font-weight:500;color:#C3D6CE;
+  padding:11px 12px;font-size:13.5px;font-weight:500;color:#EAD2DA;
   transition:background .15s,color .15s;
 }
 .nav-btn .idx{
@@ -104,7 +104,7 @@ input,select,textarea{font:inherit;color:inherit}
 .nav-btn.on .idx{color:var(--shu);opacity:1}
 .rail-logout{width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.26);border-radius:10px;background:transparent;color:#FFFFFF;font-family:var(--sans);font-size:12px;letter-spacing:.06em;cursor:pointer;opacity:.86;transition:background .15s,opacity .15s}
 .rail-logout:hover{background:rgba(255,255,255,.12);opacity:1}
-.rail-foot{margin-top:auto;padding:16px 18px 20px;border-top:1px dashed rgba(220,232,226,.28);font-size:12px;color:#B6CDC4}
+.rail-foot{margin-top:auto;padding:16px 18px 20px;border-top:1px dashed rgba(220,232,226,.28);font-size:12px;color:#E7C6D0}
 .rail-foot .num{display:block;font-size:11px;color:var(--kohaku);margin-bottom:4px}
 
 /* ---------- 本体 ---------- */
@@ -238,7 +238,7 @@ input,select,textarea{font:inherit;color:inherit}
   display:inline-block;line-height:1.35;white-space:nowrap;
 }
 .st-dan{color:var(--cha)}
-.st-kaku{color:#3C6BA8}
+.st-kaku{color:#C80850}
 .st-tei{color:var(--kohaku)}
 .st-post{color:var(--mori-3)}
 .st-bill{color:#8A5BC0}
@@ -253,7 +253,7 @@ input,select,textarea{font:inherit;color:inherit}
   white-space:nowrap;
 }
 .chip.pr{background:var(--shu-pale);border-color:#EFC4BA;color:#A63120}
-.chip.mon{background:var(--mori-pale);border-color:#C2D8CD;color:var(--mori)}
+.chip.mon{background:var(--mori-pale);border-color:#EBD0D8;color:var(--mori)}
 .chip.aff{background:var(--kohaku-pale);border-color:#EBD6A6;color:#8A6008}
 
 /* ---------- 表 ---------- */
@@ -265,7 +265,7 @@ thead th{
   white-space:nowrap;position:sticky;top:0;
 }
 tbody td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
-tbody tr:hover{background:#FBF8EF}
+tbody tr:hover{background:#FDF8F6}
 tbody tr:last-child td{border-bottom:0}
 td.r,th.r{text-align:right}
 td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
@@ -322,7 +322,7 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .tl-item.big::before{border-color:var(--shu);background:var(--shu)}
 .tl-date{font-family:var(--mono);font-size:11px;color:var(--cha);letter-spacing:.02em}
 .tl-item h4{font-size:13.5px;font-weight:900;margin:2px 0 3px;line-height:1.5}
-.tl-item p{font-size:12.5px;color:#3A4640}
+.tl-item p{font-size:12.5px;color:#3A2A31}
 .tl-item .src{font-size:10.5px;color:var(--cha);margin-top:4px}
 .tl-item .src a{color:var(--mori-3);text-decoration:underline;word-break:break-all}
 .impact{font-size:10px;font-weight:900;letter-spacing:.06em;color:var(--shu);margin-left:6px}
@@ -410,7 +410,7 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
 .cal-dow{font-size:11px;font-weight:800;color:var(--cha);text-align:center;padding:4px 0 6px;letter-spacing:.08em}
 .cal-dow.sun{color:var(--shu)}
-.cal-dow.sat{color:#3C6BA8}
+.cal-dow.sat{color:#C80850}
 .cal-cell{
   min-height:158px;border:1px solid var(--line);border-radius:9px;background:var(--kome);
   padding:6px 6px 5px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:border-color .15s;
@@ -456,13 +456,13 @@ tr.rec{cursor:pointer}
 tr.rec.open{background:var(--mori-pale)}
 tr.rec.open>td{border-bottom-color:transparent}
 .rec-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
-.rec-detail>td{padding:0!important;background:#FBF8EF}
+.rec-detail>td{padding:0!important;background:#FDF8F6}
 .rec-panel{padding:14px 16px 16px;border-top:1px dashed var(--line)}
 .rec-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px 14px;margin-bottom:12px}
 .rec-grid>div{display:flex;flex-direction:column;gap:2px}
 .rec-grid .k{font-size:10.5px;color:var(--cha);letter-spacing:.04em}
 .rec-grid b{font-family:var(--mono);font-size:13px}
-.rec-note{font-size:12.5px;color:#3A4640;background:var(--kome);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+.rec-note{font-size:12.5px;color:#3A2A31;background:var(--kome);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px}
 .st-sel{border:1.4px solid var(--line);border-radius:7px;background:#fff;padding:5px 6px;font-size:11.5px;font-weight:800;min-height:34px}
 .rec-caret{color:var(--cha);font-size:10px;display:inline-block;transition:transform .15s}
 tr.rec.open .rec-caret{transform:rotate(90deg)}
@@ -482,13 +482,13 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .acc-btn.on{box-shadow:0 0 0 2px var(--kohaku)}
 .acc-btn .av{
   flex:0 0 30px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  background:var(--mori-pale);color:var(--mori);border:1px solid #C2D8CD;
+  background:var(--mori-pale);color:var(--mori);border:1px solid #EBD0D8;
   font-family:var(--mincho);font-size:13px;font-weight:800;line-height:1;
 }
 .acc-btn .t{min-width:0;flex:1;display:block}
 .acc-btn .t b{display:block;font-size:12.5px;font-weight:900;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .acc-btn .t span{display:block;font-size:10px;color:var(--cha);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acc-btn.add{background:transparent;border:1px dashed rgba(220,232,226,.42);color:#B6CDC4;justify-content:center;font-size:11.5px;font-weight:700;min-height:38px;gap:0}
+.acc-btn.add{background:transparent;border:1px dashed rgba(220,232,226,.42);color:#E7C6D0;justify-content:center;font-size:11.5px;font-weight:700;min-height:38px;gap:0}
 .acc-btn.add:hover{background:rgba(255,255,255,.08);box-shadow:none}
 .rail-spacer{flex:1 1 auto;min-height:12px}
 .rail .rail-nav{border-top:1px dashed rgba(220,232,226,.28)}
@@ -503,7 +503,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .acc-chip.on{border-color:var(--mori);box-shadow:0 0 0 2px var(--mori-pale)}
 .acc-chip .av{
   flex:0 0 26px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  background:var(--mori-pale);color:var(--mori);border:1px solid #C2D8CD;font-family:var(--mincho);font-size:12px;font-weight:800;
+  background:var(--mori-pale);color:var(--mori);border:1px solid #EBD0D8;font-family:var(--mincho);font-size:12px;font-weight:800;
 }
 .acc-chip b{font-size:12px;font-weight:800;white-space:nowrap}
 .acc-chip small{font-size:9.5px;color:var(--cha);font-family:var(--mono);white-space:nowrap}
@@ -516,11 +516,11 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .pv-ov{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
   padding:16px;background:rgba(14,22,19,.9);backdrop-filter:blur(7px)}
 .pv-ov[hidden]{display:none}
-.pv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;color:#DCE8E2;font-size:12px;font-family:var(--mono)}
+.pv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;color:#F6E3E8;font-size:12px;font-family:var(--mono)}
 .pv-dev{display:inline-flex;gap:6px}
-.pv-dev button{border:1px solid rgba(220,232,226,.34);background:transparent;color:#C3D6CE;border-radius:99px;padding:6px 13px;font-size:11.5px;font-weight:700;min-height:34px}
+.pv-dev button{border:1px solid rgba(220,232,226,.34);background:transparent;color:#EAD2DA;border-radius:99px;padding:6px 13px;font-size:11.5px;font-weight:700;min-height:34px}
 .pv-dev button.on{background:var(--kohaku);border-color:var(--kohaku);color:#C80850}
-.pv-close{border:0;background:transparent;color:#DCE8E2;font-size:24px;line-height:1;padding:2px 8px}
+.pv-close{border:0;background:transparent;color:#F6E3E8;font-size:24px;line-height:1;padding:2px 8px}
 .pv-phone{width:390px;height:min(844px,calc(100vh - 150px));max-width:100%;flex:0 0 auto;background:#C80850;
   border:11px solid #C80850;border-radius:46px;overflow:hidden;
   box-shadow:0 34px 80px -34px #000, inset 0 0 0 1px rgba(255,255,255,.09)}
@@ -550,14 +550,14 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .ins-btn.done b{color:var(--mori)}
 .ins-acc{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--kome);width:100%}
 .ins-acc label{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--sumi);cursor:pointer}
-.inv-sheet{background:#fff;color:#1F1B14;padding:30px 34px;border-radius:8px;font-size:12px;line-height:1.7;font-family:var(--sans)}
+.inv-sheet{background:#fff;color:#231018;padding:30px 34px;border-radius:8px;font-size:12px;line-height:1.7;font-family:var(--sans)}
 .inv-sheet h1{font-family:var(--mincho);font-size:24px;letter-spacing:.22em;margin:0 0 4px}
 .inv-sheet table{width:100%;border-collapse:collapse;font-size:12px;background:none}
 .inv-sheet th,.inv-sheet td{border:1px solid #D8D2C4;padding:7px 9px;text-align:left}
-.inv-sheet th{background:#F4F1E9;font-weight:700}
+.inv-sheet th{background:#FBF4F2;font-weight:700}
 .inv-sheet .r{text-align:right}
 .inv-meta{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:16px}
-.inv-total{margin:12px 0;padding:12px 14px;background:#F4F1E9;border-radius:7px;display:flex;justify-content:space-between;align-items:baseline}
+.inv-total{margin:12px 0;padding:12px 14px;background:#FBF4F2;border-radius:7px;display:flex;justify-content:space-between;align-items:baseline}
 .inv-total b{font-family:var(--mono);font-size:21px}
 
 /* ===== タブレット〜スマホ：サイドバーを下部タブバーに ===== */
@@ -584,7 +584,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
   .nav-btn{
     flex:1 1 0;min-width:0;flex-direction:column;gap:1px;justify-content:center;
     padding:8px 2px;border-radius:0;min-height:58px;
-    font-size:10px;font-weight:700;letter-spacing:-.01em;color:#B6CDC4;
+    font-size:10px;font-weight:700;letter-spacing:-.01em;color:#E7C6D0;
   }
   .nav-btn .idx{width:auto;font-size:9px;opacity:.75}
   .nav-btn .lb{display:none}
@@ -1066,7 +1066,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
       </div>
       <div class="card" style="margin-top:16px">
         <div class="card-h"><h2>データの扱いについて</h2></div>
-        <div class="card-b" style="font-size:12.5px;color:#3A4640">
+        <div class="card-b" style="font-size:12.5px;color:#3A2A31">
           入力した案件情報・インサイト数値は<b>外部送信されません</b>。すべてこのファイル自身がブラウザ内（localStorage）に保存します。
           サーバー同期は行わないため、共有したい場合はJSONを書き出して渡してください。
         </div>
@@ -1074,7 +1074,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
       <div class="card" style="margin-top:16px;border-color:var(--mori-3)">
         <div class="card-h"><h2>Genspark に渡して分析する</h2><span class="hint">分析はGenspark側で実行</span></div>
         <div class="card-b">
-          <p style="font-size:12.5px;color:#3A4640;margin-bottom:12px">
+          <p style="font-size:12.5px;color:#3A2A31;margin-bottom:12px">
             アカウント・案件・投稿ログを集計した<b>分析ブリーフ（Markdown）</b>を生成します。コピーしてGensparkのチャットに貼り付けるだけで、
             単価の妥当性・稼働率・投稿の型・媒体配分まで分析できます。
           </p>
@@ -1087,7 +1087,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
       </div>
       <div class="card" style="margin-top:16px">
         <div class="card-h"><h2>スマホでアプリとして使う</h2><span class="hint">ホーム画面に追加</span></div>
-        <div class="card-b" style="font-size:12.5px;color:#3A4640">
+        <div class="card-b" style="font-size:12.5px;color:#3A2A31">
           <p style="margin-bottom:6px"><b>iPhone（Safari）</b>：共有ボタン → 「ホーム画面に追加」</p>
           <p style="margin-bottom:6px"><b>Android（Chrome）</b>：右上メニュー → 「アプリをインストール」</p>
           <div class="callout ok" style="margin-top:12px">ホーム画面から起動するとURLバーが消えて全画面のアプリとして動きます。<b>電波が悪い店内でも開けます</b>（オフライン対応）。</div>
@@ -1976,19 +1976,19 @@ function invoiceBody(c) {
   const due = new Date(issued.getTime() + (Number(c.payTerm) || 30) * 86400000);
   return `<div class="inv-sheet">
     <div class="inv-meta">
-      <div><h1>請求書</h1><div style="font-size:11px;color:#6B6558;letter-spacing:.2em">INVOICE</div>
+      <div><h1>請求書</h1><div style="font-size:11px;color:#6B5A62;letter-spacing:.2em">INVOICE</div>
         ${(c.invoiceHistory || []).length ? '<div style="display:inline-block;margin-top:7px;padding:2px 9px;border:1px solid #F84060;color:#F84060;font-size:10.5px;font-weight:700;border-radius:3px;letter-spacing:.08em">再発行</div>' : ''}</div>
       <div style="text-align:right;font-size:11.5px">
         <div>請求書番号 <b>${esc(c.invoice || nextInvoiceNo(parseD(c.date) || TODAY))}</b></div>
         <div>発行日 ${esc(jDate(issued))}</div>
-        ${(c.invoiceHistory || []).length ? `<div style="font-size:10.5px;color:#6B6558">旧番号 ${esc(c.invoiceHistory.map(h => h.no).join(' / '))}</div>` : ''}
+        ${(c.invoiceHistory || []).length ? `<div style="font-size:10.5px;color:#6B5A62">旧番号 ${esc(c.invoiceHistory.map(h => h.no).join(' / '))}</div>` : ''}
         ${p.regNo ? `<div>登録番号 ${esc(p.regNo)}</div>` : ''}
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:18px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:16px;font-weight:800;border-bottom:2px solid #1F1B14;padding-bottom:6px;margin-bottom:8px">${esc(c.client || '（宛先未設定）')} 御中</div>
-        <div style="font-size:11.5px;color:#6B6558">下記のとおりご請求申し上げます。</div>
+        <div style="font-size:16px;font-weight:800;border-bottom:2px solid #231018;padding-bottom:6px;margin-bottom:8px">${esc(c.client || '（宛先未設定）')} 御中</div>
+        <div style="font-size:11.5px;color:#6B5A62">下記のとおりご請求申し上げます。</div>
       </div>
       <div style="flex:0 0 220px;font-size:11.5px;line-height:1.8">
         ${p.issuer ? `<b style="font-size:13px">${esc(p.issuer)}</b>` : '<b style="font-size:13px;color:#B03A2E">（発行者名 未設定）</b>'}
@@ -2003,7 +2003,7 @@ function invoiceBody(c) {
     <table>
       <thead><tr><th>品名</th><th class="r" style="width:64px">数量</th><th class="r" style="width:120px">単価</th><th class="r" style="width:120px">金額</th></tr></thead>
       <tbody>
-        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B6558">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(dFull(c.date)) : ''}${campAccNames(c) ? ' / ' + esc(campAccNames(c)) : ''}</div></td>
+        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(dFull(c.date)) : ''}${campAccNames(c) ? ' / ' + esc(campAccNames(c)) : ''}</div></td>
           <td class="r">1</td><td class="r">${yen(sub)}</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">小計</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">消費税（${rate}%）</td><td class="r">${yen(tax)}</td></tr>
@@ -2013,18 +2013,18 @@ function invoiceBody(c) {
     <div style="margin-top:14px;font-size:11.5px;line-height:1.8">
       <div><b>お支払期限</b>　${esc(jDate(due))}</div>
       ${p.bank ? `<div><b>お振込先</b>　${esc(p.bank)}</div>` : '<div style="color:#B03A2E"><b>お振込先</b>　（データ管理 → 請求書の発行者情報 で設定してください）</div>'}
-      ${p.note ? `<div style="margin-top:8px;color:#6B6558">${esc(p.note)}</div>` : ''}
+      ${p.note ? `<div style="margin-top:8px;color:#6B5A62">${esc(p.note)}</div>` : ''}
     </div>
   </div>`;
 }
-const INV_CSS = 'body{margin:0;padding:26px;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif;color:#1F1B14;background:#fff}'
+const INV_CSS = 'body{margin:0;padding:26px;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif;color:#231018;background:#fff}'
   + '.inv-sheet{max-width:760px;margin:0 auto;font-size:12px;line-height:1.7}'
   + '.inv-sheet h1{font-family:"Hiragino Mincho ProN","Yu Mincho",serif;font-size:24px;letter-spacing:.22em;margin:0 0 4px}'
   + '.inv-sheet table{width:100%;border-collapse:collapse;font-size:12px}'
   + '.inv-sheet th,.inv-sheet td{border:1px solid #D8D2C4;padding:7px 9px;text-align:left}'
-  + '.inv-sheet th{background:#F4F1E9;font-weight:700}.inv-sheet .r{text-align:right}'
+  + '.inv-sheet th{background:#FBF4F2;font-weight:700}.inv-sheet .r{text-align:right}'
   + '.inv-meta{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:16px}'
-  + '.inv-total{margin:12px 0;padding:12px 14px;background:#F4F1E9;border-radius:7px;display:flex;justify-content:space-between;align-items:baseline}'
+  + '.inv-total{margin:12px 0;padding:12px 14px;background:#FBF4F2;border-radius:7px;display:flex;justify-content:space-between;align-items:baseline}'
   + '.inv-total b{font-family:ui-monospace,Menlo,monospace;font-size:21px}@page{size:A4;margin:14mm}';
 function printDoc(inner, title) {
   const w = window.open('', '_blank', 'width=880,height=1000');
@@ -3125,7 +3125,7 @@ function renderTrends() {
   document.getElementById('mediaBox').innerHTML = MEDIA_POINTS.map(([m, b]) =>
     `<div style="padding:10px 0;border-bottom:1px dashed var(--line-soft)">
       <div style="font-weight:900;font-size:12.5px">${esc(m)}</div>
-      <div style="font-size:12px;color:#3A4640">${esc(b)}</div></div>`).join('');
+      <div style="font-size:12px;color:#3A2A31">${esc(b)}</div></div>`).join('');
   document.getElementById('trendWords').innerHTML = TREND_WORDS.map(w => `<span class="chip">${esc(w)}</span>`).join('');
   document.getElementById('unitNotes').innerHTML = UNIT_NOTES;
 
