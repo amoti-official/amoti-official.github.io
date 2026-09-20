@@ -903,20 +903,15 @@ html{zoom:.7}
       <div class="sec-title"><h2>アカウント一覧</h2>
         <span class="note">複数媒体をまとめて管理</span>
       </div>
-      <div class="inline" style="margin-bottom:14px">
-        <button class="btn primary" id="btnFollow">＋ 今日のフォロワーを記録</button>
-        <span style="font-size:11.5px;color:var(--cha)">全アカウントをまとめて1日1点で記録できます</span>
-      </div>
+      
       <div class="grid g-3" id="accountCards"></div>
 
       <div class="sec-title"><h2>媒体別の合計とその先</h2>
         <span class="note">フォロワー資産の配分</span>
       </div>
       <div class="split">
-        <div class="card"><div class="card-h"><h2>フォロワー構成</h2><span class="hint">媒体別</span></div>
-          <div class="card-b"><div id="chartFollowers"></div></div></div>
-        <div class="card"><div class="card-h"><h2>単価の目安</h2><span class="hint">フォロワー単価 2〜4円換算</span></div>
-          <div class="card-b"><div class="tw" id="unitTable"></div></div></div>
+        
+        
       </div>
     </section>
 
@@ -2473,10 +2468,10 @@ function renderAccounts() {
     label: k, value: v, text: wan(v) + '（' + ((v / (DB.accounts.reduce((s,a)=>s+(Number(a.followers)||0),0) || 1)) * 100).toFixed(0) + '%）',
     color: k === 'Instagram' ? 'var(--mori-3)' : k === 'TikTok' ? 'var(--shu)' : k === 'YouTube' ? 'var(--kohaku)' : 'var(--cha)'
   }));
-  document.getElementById('chartFollowers').innerHTML = rows.length ? chartHBars(rows, { aria: '媒体別フォロワー' }) : emptyBox('アカウント未登録');
+  const cfEl = document.getElementById('chartFollowers'); if (cfEl) cfEl.innerHTML = rows.length ? chartHBars(rows, { aria: '媒体別フォロワー' }) : emptyBox('アカウント未登録');
 
   // 単価表
-  document.getElementById('unitTable').innerHTML = DB.accounts.length ? `<table>
+  const utEl = document.getElementById('unitTable'); if (utEl) utEl.innerHTML = DB.accounts.length ? `<table>
     <thead><tr><th>アカウント</th><th class="num r">フォロワー</th><th class="num r">1投稿の目安</th><th class="num r">直近の実績平均</th></tr></thead>
     <tbody>${DB.accounts.map(a => {
       const f = Number(a.followers) || 0;
@@ -2614,12 +2609,8 @@ function openAccount(id, presetPlatform) {
     <div class="field"><label>表示名 *</label><input name="name" required value="${esc(d.name)}" placeholder="もぐお｜大阪グルメ"></div>
     <div class="field"><label>ハンドル</label><input name="handle" value="${esc(d.handle)}" placeholder="@moguo.osaka"></div>
     <div class="field"><label>媒体</label><select name="platform">${PLATFORMS.map(p => `<option ${p === d.platform ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
-    <div class="field"><label>ジャンル</label><input name="genre" value="${esc(d.genre)}" placeholder="ラーメン / スイーツ / カフェ"></div>
-    <div class="field"><label>フォロワー数</label><input name="followers" type="number" min="0" value="${esc(d.followers)}"></div>
-    <div class="field"><label>公表ER（%）</label><input name="er" type="number" step="0.1" min="0" value="${esc(d.er)}"></div>
-    <div class="field"><label>月間の伸び（%）</label><input name="growth" type="number" step="0.1" value="${esc(d.growth)}"></div>
-    <div class="field wide"><label>メモ</label><input name="note" value="${esc(d.note)}" placeholder="伸びている型・注意点"></div>
-    <div class="field wide act-row">
+        <div class="field"><label>フォロワー数</label><input name="followers" type="number" min="0" value="${esc(d.followers)}"></div>
+                <div class="field wide act-row">
       <button type="submit" class="btn primary">${a ? '保存する' : '登録する'}</button>
       <button type="button" class="btn ghost" id="acCancel">キャンセル</button>
       ${a ? '<button type="button" class="btn shu" id="acDelete">削除</button>' : ''}
@@ -2852,8 +2843,11 @@ function openAccount(id, presetPlatform) {
     }
     const name = v('name').trim();
     if (!name) { toast('表示名を入力してください'); return; }
-    const data = { name: name, handle: v('handle').trim(), platform: v('platform'), genre: v('genre').trim(),
-      followers: Number(v('followers')) || 0, er: Number(v('er')) || 0, growth: Number(v('growth')) || 0, note: v('note').trim() };
+    const keepS = n => (form.elements[n] ? form.elements[n].value.trim() : (a ? String(a[n] || '') : ''));
+    const keepN = n => (form.elements[n] ? (Number(form.elements[n].value) || 0) : (a ? (Number(a[n]) || 0) : 0));
+    const data = { name: name, handle: v('handle').trim(), platform: v('platform'),
+      genre: keepS('genre'), followers: Number(v('followers')) || 0,
+      er: keepN('er'), growth: keepN('growth'), note: keepS('note') };
     const icOut = window.__accIcon ? window.__accIcon() : null;
     if (icOut !== null) data.icon = icOut;
     let target = a;
@@ -3714,7 +3708,7 @@ document.getElementById('view-dash').addEventListener('click', e => {
 });
 document.getElementById('dashFrom').addEventListener('change', e => { dashPeriod.from = e.target.value; dashPeriod.mode = 'custom'; renderDash(); });
 document.getElementById('dashTo').addEventListener('change', e => { dashPeriod.to = e.target.value; dashPeriod.mode = 'custom'; renderDash(); });
-document.getElementById('btnFollow').onclick = () => openFollow();
+const bfEl = document.getElementById('btnFollow'); if (bfEl) bfEl.onclick = () => openFollow();
 document.getElementById('adFollowBtn').onclick = () => openFollow(currentAccount);
 document.getElementById('adShotBtn').onclick = () => openFollowShot(currentAccount);
 document.getElementById('adOpenSns').onclick = () => {
