@@ -2429,6 +2429,7 @@ function openInsightImport(id) {
    アカウント
    ========================================================================= */
 function renderAccounts() {
+  const avgN = (arr, k) => arr.length ? arr.reduce((s, p) => s + (Number(p[k]) || 0), 0) / arr.length : null;
   document.getElementById('accountCards').innerHTML = DB.accounts.map(a => {
     const ps = DB.posts.filter(p => p.accountId === a.id);
     const recent = ps.filter(p => parseD(p.date) >= dAgo(90));
@@ -2447,15 +2448,15 @@ function renderAccounts() {
       </div>
       <div class="kpis" style="grid-template-columns:1fr 1fr;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
         <div class="kpi" style="padding-left:0;border:0">
-          <div class="k">フォロワー</div><div class="v" style="font-size:24px">${wan(a.followers)}</div>
-          <div class="d ${a.growth >= 0 ? 'up' : 'down'}">${a.growth >= 0 ? '＋' : ''}${a.growth}% / 月</div></div>
+          <div class="k">フォロワー</div><div class="v" style="font-size:24px">${nf(a.followers)}</div>
+          <div class="d">前日比 <b class="num" style="color:${dl1 >= 0 ? 'var(--ok)' : 'var(--shu)'}">${dl1 >= 0 ? '＋' : '−'}${nf(Math.abs(dl1))}</b></div></div>
         <div class="kpi" style="border:0">
-          <div class="k">直近90日 ER</div><div class="v" style="font-size:24px">${er.toFixed(2)}<span class="u">%</span></div>
-          <div class="d">登録値 ${pct(a.er)}</div></div>
+          <div class="k">平均リーチ</div><div class="v" style="font-size:24px">${avgN(recent, 'reach') === null ? '—' : wan(avgN(recent, 'reach'))}</div>
+          <div class="d">直近90日の投稿 <b class="num">${recent.length}</b>本の平均</div></div>
       </div>
-      <div style="font-size:11.5px;color:var(--cha);margin-top:10px">
-        前日比 <b class="num" style="color:${dl1 >= 0 ? 'var(--ok)' : 'var(--shu)'}">${dl1 >= 0 ? '＋' : '−'}${nf(Math.abs(dl1))}</b>
-        · 90日リーチ <b class="num">${wan(reach90)}</b> · 投稿 <b class="num">${recent.length}</b>本 · 保存率 <b class="num">${saver.toFixed(2)}%</b>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(86px,1fr));margin-top:6px">
+        ${[['平均いいね', 'likes'], ['平均コメント', 'comments'], ['平均シェア', 'shares'], ['平均保存', 'saves']]
+          .map(([k, f]) => `<div class="kpi" style="padding:8px 0;border:0"><div class="k">${k}</div><div class="v" style="font-size:17px">${avgN(recent, f) === null ? '—' : nf(Math.round(avgN(recent, f)))}</div></div>`).join('')}
       </div>
       ${a.note ? `<div class="callout" style="margin-top:10px">${esc(a.note)}</div>` : ''}
     </div></article>`;
@@ -3012,13 +3013,15 @@ function renderAccountDetail() {
     ? chartLine(series.slice(-30).map(p => ({ label: dLabel(p.d), value: Number(p.v) || 0 })), { height: 210, aria: 'フォロワー推移' })
     : emptyBox('「＋ 今日の数値を記録」から毎日のフォロワー数を登録すると、ここに推移が出ます');
 
+  const avgOf = k => recent.length ? sum(k) / recent.length : null;
+  const avgTxt = (k, f) => avgOf(k) === null ? '—' : f(avgOf(k));
   document.getElementById('adKpis').innerHTML = [
     ['フォロワー', nf(a.followers), `前日比 ${sign(dl1)} ／ 30日 ${sign(dl30)} ／ 7日 ${sign(dl7)}`],
-    ['直近90日リーチ', wan(sum('reach')), `投稿 ${recent.length}本`],
-    ['平均ER', pct(avg(p => metrics(p).er)), `公表値 ${pct(a.er)}`],
-    ['平均保存率', pct(avg(p => metrics(p).save)), `保存 ${nf(sum('saves'))}`],
-    ['平均シェア率', pct(avg(p => metrics(p).share)), `シェア ${nf(sum('shares'))}`],
-    ['平均フォロワー増', nf(Math.round(avg(p => Number(p.follows) || 0))), '1投稿あたり']
+    ['平均リーチ', avgTxt('reach', v => wan(v)), `直近90日の投稿 ${recent.length}本の平均`],
+    ['平均いいね', avgTxt('likes', v => nf(Math.round(v))), `合計 ${nf(sum('likes'))}`],
+    ['平均コメント', avgTxt('comments', v => nf(Math.round(v))), `合計 ${nf(sum('comments'))}`],
+    ['平均シェア', avgTxt('shares', v => nf(Math.round(v))), `合計 ${nf(sum('shares'))}`],
+    ['平均保存', avgTxt('saves', v => nf(Math.round(v))), `合計 ${nf(sum('saves'))}`]
   ].map(([k, v, d]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join('');
 
   const chron = posts.slice(-16);
