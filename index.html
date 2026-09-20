@@ -1196,69 +1196,12 @@ const ST_MAP = {'打診':'進行中','交渉中':'進行中','確定':'進行中
 
 /* ---------- サンプルデータ ---------- */
 function seed() {
-  const accounts = [
-    {id:'a1', name:'まい｜東京グルメ',       handle:'@tokyo_gurmet_mai', platform:'Instagram', genre:'カフェ・料理',   followers:82400,  er:3.8, growth:1.2, note:'平日ランチと純喫茶。保存率が高い'},
-    {id:'a2', name:'たろう｜ラーメン巡り',   handle:'@ramen_hunt_taro',  platform:'Instagram', genre:'ラーメン',       followers:45200,  er:5.1, growth:2.4, note:'濃厚系。男性フォロワー比率高め'},
-    {id:'a3', name:'ゆい｜大阪食べ歩き',     handle:'@gourmet.osaka.yui',platform:'TikTok',    genre:'大阪グルメ',     followers:128000, er:7.4, growth:4.1, note:'1分以上の長尺が伸びる'},
-    {id:'a4', name:'びより｜スイーツ部',     handle:'@sweets.biyori',    platform:'Instagram', genre:'スイーツ',       followers:23600,  er:6.2, growth:3.0, note:'新作スイーツの速報が強い'},
-    {id:'a5', name:'東京食べ歩きチャンネル', handle:'@tokyo_tabearuki',  platform:'YouTube',   genre:'飲食店レビュー', followers:18900,  er:4.0, growth:0.6, note:'10分前後のレビュー動画'},
-    {id:'a6', name:'めぐり｜純喫茶ノート',   handle:'@kissaten_meguri',  platform:'Threads',   genre:'喫茶店',         followers:9800,   er:3.1, growth:5.8, note:'短文＋写真。会話が生まれやすい'}
-  ];
+  const accounts = [];
 
-  const campaigns = [
-    {id:'c1', client:'株式会社ミナト製菓',   title:'秋限定モンブランのPRリール',        accountId:'a4', type:'PR案件',      reward:35000,  status:'入金済', date:ymd(dAgo(52)), pr:true, prSet:true, invoice:'INV-2607-01', payTerm:30, note:'保存数が過去最高。2次利用の打診あり'},
-    {id:'c2', client:'麺屋 一途',             title:'新作つけ麺の試食レポート',          accountId:'a2', type:'モニター',    reward:8000,   status:'入金済', date:ymd(dAgo(44)), pr:true, prSet:true, invoice:'INV-2607-02', payTerm:30, note:'商品提供＋交通費込み'},
-    {id:'c3', client:'カフェ・ルミエール',    title:'新店舗オープン告知',                accountId:'a1', type:'タイアップ',  reward:60000,  status:'入金済', date:ymd(dAgo(38)), pr:true, prSet:true, invoice:'INV-2607-03', payTerm:45, note:''},
-    {id:'c4', client:'DELISH DELI',           title:'冷凍グルメのレシピ動画',            accountId:'a3', type:'PR案件',      reward:120000, status:'請求済', date:ymd(dAgo(26)), pr:true, prSet:true, invoice:'INV-2608-01', payTerm:60, note:'TikTok長尺。再生92万'},
-    {id:'c5', client:'老舗喫茶 こもれび',     title:'純喫茶めぐり連載 第3回',            accountId:'a6', type:'タイアップ',  reward:18000,  status:'投稿済', date:ymd(dAgo(12)), visitAt:dtLocal(dAgo(14, 14)),  pr:true, prSet:true, invoice:'', payTerm:30, note:'請求書をまだ出していない'},
-    {id:'c6', client:'OSAKA STREET FOOD',     title:'食べ歩き動画（3店舗まとめ）',       accountId:'a3', type:'PR案件',      reward:150000, status:'投稿済', date:ymd(dAgo(6)), visitAt:dtLocal(dAgo(8, 13)),   pr:true, prSet:true, invoice:'', payTerm:30, note:''},
-    {id:'c7', client:'和菓子処 つきのわ',     title:'季節の上生菓子レポート',            accountId:'a1', type:'アフィリエイト', reward:0,  status:'投稿済', date:ymd(dAgo(3)),  pr:true, prSet:true, invoice:'', payTerm:0,  note:'成果報酬。初動2,400円'},
-    {id:'c8', client:'ラーメン王将',           title:'新メニュー試食会',                  accountId:'a2', type:'PR案件',      reward:45000,  status:'確定',   date:ymd(dAgo(-4)), visitAt:dtLocal(dAgo(-6, 15)),  pr:true, prSet:false, invoice:'', payTerm:30, note:'PR表記の指定をクライアントに確認中'},
-    {id:'c9', client:'スイーツバイキング博',   title:'イベント来場レポート',              accountId:'a4', type:'タイアップ',  reward:28000,  status:'確定',   date:ymd(dAgo(-9)), visitAt:dtLocal(dAgo(-11, 11)),  pr:true, prSet:false, invoice:'', payTerm:30, note:''},
-    {id:'c10',client:'株式会社カフェラボ',     title:'コーヒー器具のレビュー',            accountId:'a5', type:'PR案件',      reward:80000,  status:'交渉中', date:ymd(dAgo(-14)), visitAt:dtLocal(dAgo(-16, 14)), pr:true, prSet:false, invoice:'', payTerm:30, note:'ギャラ交渉中。12万円を希望'},
-    {id:'c11',client:'地元商店街振興組合',     title:'商店街ランチマップ掲載',            accountId:'a1', type:'タイアップ',  reward:15000,  status:'打診',   date:ymd(dAgo(-21)), visitAt:dtLocal(dAgo(-23, 12)), pr:true, prSet:false, invoice:'', payTerm:30, note:''},
-    {id:'c12',client:'ネオ和菓子 こよみ',     title:'炙り生餅の紹介',                    accountId:'a4', type:'PR案件',      reward:22000,  status:'見送り', date:ymd(dAgo(20)), pr:false, prSet:false, invoice:'', payTerm:30, note:'単価が合わず見送り（フォロワー単価0.9円）'},
-    {id:'c13',client:'居酒屋 とりまる',       title:'飲み放題コースの撮影',              accountId:'a2', type:'PR案件',      reward:30000,  status:'打診',   date:ymd(dAgo(-28)), visitAt:dtLocal(dAgo(-30, 19)), pr:false, prSet:false, invoice:'', payTerm:30, note:''},
-    {id:'c14',client:'甘味処 あんこや',       title:'新作かき氷を2アカウントで紹介',      accountIds:['a1','a4'], type:'PR案件', reward:52000, status:'進行中', date:ymd(dAgo(-7)), visitAt:dtLocal(dAgo(-9, 14)), pr:true, prSet:false, invoice:'', payTerm:30, note:'同じ店舗に別アカウントで訪問。報酬は2本分の合計'}
-  ];
+  const campaigns = [];
 
   // [accountId, daysAgo, hour, format, reach, likes, comments, saves, shares, follows, campaignId, tags]
-  const P = [
-    ['a1', 71, 12, 'リール',    41200, 3180, 148, 980, 640, 210, '', ['東京カフェ','純喫茶','ランチ']],
-    ['a1', 64, 19, 'カルーセル',18600, 1420,  96, 520, 210,  88, '', ['喫茶店巡り','レトロ','東京']],
-    ['a1', 52,  8, 'ストーリーズ', 9400,  0,   62,  40, 180,  35, '', []],
-    ['a1', 38, 11, 'リール',    68400, 5210, 302,1740,1180, 402, 'c3', ['新店舗','オープン','カフェ']],
-    ['a1', 30, 20, 'フィード',   15800,  980,  74, 260, 120,  52, '', ['東京グルメ','夜カフェ','スイーツ']],
-    ['a1', 17, 12, 'リール',    52900, 4020, 246,1310, 760, 318, '', ['ランチ','東京','コスパ']],
-    ['a1',  3, 18, 'カルーセル',22100, 1680, 118, 640, 290, 101, 'c7', ['和菓子','上生菓子','季節']],
-    ['a1',  1, 12, 'リール',    33700, 2610, 152, 880, 430, 176, '', ['喫茶店','モーニング','東京']],
-
-    ['a2', 66, 21, 'リール',    29800, 2410, 186, 520, 340, 152, '', ['ラーメン','東京','濃厚']],
-    ['a2', 44, 19, 'フィード',   13400,  890,  62, 210,  90,  41, 'c2', ['つけ麺','新作','試食']],
-    ['a2', 35, 12, 'リール',    37100, 3120, 214, 690, 410, 188, '', ['ラーメン','行列','東京']],
-    ['a2', 22, 20, 'カルーセル',16900, 1180,  88, 380, 150,  73, '', ['ラーメン','食べ比べ','家系']],
-    ['a2',  9, 21, 'リール',    24300, 1920, 142, 470, 260, 118, '', ['ラーメン','新店','醤油']],
-
-    ['a3', 58, 20, 'TikTok',   412000,24800,1420,9200,6400,2180, '', ['大阪グルメ','食べ歩き','コスパ']],
-    ['a3', 40, 19, 'TikTok',   688000,38400,2120,14600,9800,3420, '', ['大阪','たこ焼き','激安']],
-    ['a3', 26, 21, 'TikTok',   928000,52100,3040,21800,13600,4820, 'c4', ['冷凍食品','レシピ','時短']],
-    ['a3', 14, 20, 'TikTok',   524000,29600,1680,11200,7200,2640, '', ['大阪','ラーメン','夜食']],
-    ['a3',  6, 19, 'TikTok',   742000,41300,2380,16400,10400,3860, 'c6', ['食べ歩き','3店舗','梅田']],
-
-    ['a4', 60, 15, 'リール',    14300, 1280,  96, 380, 210,  82, '', ['スイーツ','新作','コンビニ']],
-    ['a4', 52, 14, 'リール',    26800, 2340, 168, 710, 420, 164, 'c1', ['モンブラン','秋','限定']],
-    ['a4', 33, 16, 'カルーセル', 9200,  740,  58, 240, 110,  48, '', ['スイーツ','カフェ','東京']],
-    ['a4', 19, 15, 'リール',    19700, 1720, 124, 520, 300, 121, '', ['パフェ','新作','映え']],
-    ['a4',  5, 14, 'リール',    15400, 1340,  92, 410, 220,  94, '', ['スイーツ','秋','限定']],
-
-    ['a5', 50, 18, 'TikTok',    8600,  620,  74, 140,  90,  38, '', ['食べ歩き','レビュー','東京']],
-    ['a5', 27, 18, 'TikTok',   11200,  810,  92, 190, 120,  52, '', ['ラーメン','レビュー','実食']],
-    ['a5', 11, 18, 'TikTok',    9800,  730,  81, 160, 105,  44, '', ['飲食店','レビュー','コスパ']],
-
-    ['a6', 24, 22, 'フィード',   4600,  380,  46, 120,  70,  31, '', ['純喫茶','喫茶店','東京']],
-    ['a6', 12, 22, 'フィード',   6800,  540,  68, 190, 120,  48, 'c5', ['純喫茶','レトロ','こもれび']],
-    ['a6',  2, 21, 'フィード',   5200,  410,  52, 140,  88,  36, '', ['喫茶店','モーニング','東京']]
-  ];
+  const P = [];
 
   const posts = P.map((r, i) => {
     const d = dAgo(r[1], r[2]);
@@ -1309,6 +1252,11 @@ const PROF_DEF = { issuer:'', title:'', zip:'', address:'', tel:'', email:'', re
 
 /* ---------- 永続化 ---------- */
 let DB = load();
+/* デモデータ撤去：この端末に保存済みのデータからもアカウント・案件を消す（初回のみ） */
+if (!DB.dataRev || DB.dataRev < 2) {
+  DB.accounts = []; DB.campaigns = []; DB.posts = []; DB.followLog = {}; DB.dataRev = 2;
+  save();
+}
 function load() {
   try {
     if (window.__PV && window.__PV.db) return normalize(window.__PV.db);
