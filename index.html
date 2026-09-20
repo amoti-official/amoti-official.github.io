@@ -2080,9 +2080,9 @@ async function ocrRun(file, stat, opts) {
   const T = await ocrLib();
   stat('<span style="color:var(--cha)">読み取り中…（初回はライブラリの読み込みで10秒ほどかかります）</span>');
   const src = await ocrPrep(file, opts.scale || 1);
-  const r = await T.recognize(src, opts.lang || 'eng', {
-    logger: m => { if (m && m.status === 'recognizing text') stat('<span style="color:var(--cha)">読み取り中… ' + Math.round((m.progress || 0) * 100) + '%</span>'); }
-  });
+  const o = { logger: m => { if (m && m.status === 'recognizing text') stat('<span style="color:var(--cha)">読み取り中… ' + Math.round((m.progress || 0) * 100) + '%</span>'); } };
+  if (opts.params) Object.assign(o, opts.params);
+  const r = await T.recognize(src, opts.lang || 'eng', o);
   return r.data;
 }
 function ocrNumbers(data) {
@@ -2107,6 +2107,71 @@ function ocrNumbers(data) {
   const out = [];
   big.forEach(c => { if (!out.some(o => Math.abs(o.y - c.y) < c.h * 0.7 && o.v === c.v)) out.push(c); });
   return out.map(c => c.v);
+}
+/* --- 指標の横並び行を検出し、左→右の並びで割り当てる --- */
+function ocrWords(data) {
+  if (data && data.words && data.words.length) return data.words;
+  const out = [];
+  ((data && data.blocks) || []).forEach(b => (b.paragraphs || []).forEach(pp => (pp.lines || []).forEach(l => (l.words || []).forEach(w => out.push(w)))));
+  return out;
+}
+function ocrInsightItems(data) {
+  const cands = [];
+  ocrWords(data).forEach(w => {
+    if (!w.bbox) return;
+    const raw = String(w.text || '').trim();
+    const h = w.bbox.y1 - w.bbox.y0;
+    if (h < 10) return;
+    const dash = /^[-\u2013\u2014\u2212\u30fc]{1,3}$/.test(raw);
+    let v = 0;
+    if (!dash) {
+      const t = raw.replace(/\s+/g, '');
+      v = parseFloat(t.replace(/[^0-9.,]/g, '').replace(/[,.](?=\d{3}\b)/g, '').replace(/,/g, ''));
+      if (!isFinite(v)) return;
+      if (t.indexOf('\u4e07') >= 0) v = v * 10000;
+    }
+    cands.push({ v: Math.round(v), raw, h, y: w.bbox.y0, cx: (w.bbox.x0 + w.bbox.x1) / 2 });
+  });
+  if (!cands.length) return [];
+  const maxH = Math.max.apply(null, cands.map(c => c.h));
+  const pos = cands.filter(c => c.v > 0 && c.h >= maxH * 0.6);
+  if (!pos.length) return [];
+  const tol = Math.max(8, maxH * 0.7);
+  const lines = [];
+  pos.slice().sort((a, b) => a.y - b.y).forEach(c => {
+    let L = null;
+    lines.forEach(x => { if (!L && Math.abs(x.y - c.y) < tol) L = x; });
+    if (!L) { L = { y: c.y, items: [] }; lines.push(L); }
+    L.items.push(c); L.y = L.y * 0.6 + c.y * 0.4;
+  });
+  const wide = l => l.items.length > 1 ? l.items[l.items.length - 1].cx - l.items[0].cx : 0;
+  const rows = lines.filter(l => l.items.length >= 2 && wide(l) > maxH * 1.5);
+  const pick = rows.length ? rows : lines.filter(l => l.items.length >= 2);
+  if (!pick.length) return [];
+  pick.sort((a, b) => (b.items.length - a.items.length) || (wide(b) - wide(a)));
+  const best = pick[0];
+  const band = maxH * 0.85;
+  const inRow = cands.filter(c => best.items.some(i => Math.abs(c.y - i.y) < band));
+  const uniq = [];
+  inRow.sort((a, b) => a.cx - b.cx).forEach(c => {
+    const dup = uniq.find(u => Math.abs(u.cx - c.cx) < Math.max(6, maxH * 0.5) && Math.abs(u.y - c.y) < band);
+    if (dup) { if (c.h > dup.h) { dup.h = c.h; dup.v = c.v; dup.raw = c.raw; } return; }
+    uniq.push(c);
+  });
+  return uniq;
+}
+function insightAssign(items) {
+  const o = { reach: '', likes: '', comments: '', saves: '', shares: '' };
+  const slots = (items || []).map(it => ({ it, key: '' }));
+  const n = slots.length;
+  if (!n) return { o, slots };
+  const last = n - 1;
+  slots[0].key = 'reach';
+  if (n >= 2) slots[1].key = 'likes';
+  if (n >= 3) slots[last].key = 'saves';
+  if (n >= 4) { slots[2].key = 'comments'; if (last - 2 >= 3) slots[last - 1].key = 'shares'; }
+  slots.forEach(x => { if (x.key) o[x.key] = x.it.v; });
+  return { o, slots };
 }
 function profileUrl(a) {
   const h = String(a.handle || '').replace(/^@/, '').trim();
@@ -2323,7 +2388,7 @@ function openInsightImport(id) {
   const pool = accs.length ? accs : DB.accounts;
   if (!pool.length) { toast('先にアカウントを登録してください'); return; }
   openModal('インサイト画像を取り込む', `<form id="insForm" class="fgrid">
-    <div class="field wide"><div class="callout">投稿のスクリーンショットから数値を読み取って自動入力します。<b>読み取り結果は必ず画像と照合して修正してください。</b>「12.3万」のような省略表記や小さい数字は読み取れないことがあります。画像そのものは保存されません。</div></div>
+    <div class="field wide"><div class="callout">投稿のスクリーンショットから数値を読み取って自動入力します。<b>指標が並んでいる行を左から順に</b>割り当てます（読み取り後に検出一覧で付け替えできます）。<b>結果は必ず画像と照合してください。</b>「12.3万」のような省略表記や小さい数字は読み取れないことがあります。画像そのものは保存されません。</div></div>
     <div class="field"><label>対象アカウント</label><select name="accountId">${pool.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></div>
     <div class="field"><label>投稿日</label><input name="date" type="date" value="${esc(ymd(TODAY))}"></div>
     <div class="field"><label>形式</label><select name="format">${FORMATS.map(f => `<option ${f === 'リール' ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
@@ -2351,9 +2416,11 @@ function openInsightImport(id) {
     const reach = g('reach');
     const eng = g('likes') + g('comments') + g('saves') + g('shares');
     const el = document.getElementById('insCalc');
-    if (el) el.innerHTML = reach
+    const over = reach && (eng > reach || g('saves') > reach || g('shares') > reach);
+    if (el) el.innerHTML = (reach
       ? `ER <b class="num">${(eng / reach * 100).toFixed(2)}%</b> · 保存率 <b class="num">${(g('saves') / reach * 100).toFixed(2)}%</b> · シェア率 <b class="num">${(g('shares') / reach * 100).toFixed(2)}%</b>`
-      : '数値を入れるとER・保存率・シェア率を自動計算します。';
+      : '数値を入れるとER・保存率・シェア率を自動計算します。')
+      + (over ? '<div style="color:var(--shu);font-weight:700;margin-top:4px">読み取り値の割り当てが誤っている可能性があります（100%を超えています）。画像と照合してください。</div>' : '');
   };
   form.addEventListener('input', upd); upd();
 
@@ -2380,16 +2447,34 @@ function openInsightImport(id) {
     document.getElementById('insPrev').innerHTML = `<label>取り込んだ画像</label><img class="ins-shot" src="${url}" alt="取り込んだインサイト画像">`;
     stat('<span style="color:var(--cha)">読み取りを準備しています…</span>');
     try {
-      const data = await ocrRun(file, stat);
-      const nums = ocrNumbers(data);
-      if (!nums.length) {
+      const data = await ocrRun(file, stat, { scale: 2, params: { tessedit_pageseg_mode: '11' } });
+      const items = ocrInsightItems(data);
+      if (!items.length) {
         stat('<div class="callout warn">数値を読み取れませんでした。<b>画像を見ながら手入力してください。</b></div>');
         return;
       }
-      ['reach', 'likes', 'comments', 'saves', 'shares'].forEach((k, i) => { if (nums[i] !== undefined) form.elements[k].value = nums[i]; });
+      const asg = insightAssign(items);
+      ['reach', 'likes', 'comments', 'saves', 'shares'].forEach(k => { if (asg.o[k] !== '') form.elements[k].value = asg.o[k]; });
       upd();
-      stat(`<div class="callout"><b>${nums.length}個の数値を検出</b>：${nums.slice(0, 12).map(n => nf(n)).join(' / ')}
-        <div style="font-size:11.5px;margin-top:4px">上から順に「リーチ・いいね・コメント・保存・シェア」へ入れています。画像と照合して修正してください。</div></div>`);
+      const lbl = { '': '使わない', reach: 'リーチ', likes: 'いいね', comments: 'コメント', saves: '保存', shares: 'シェア', follows: '新規フォロワー' };
+      const el = document.getElementById('insStat');
+      el.innerHTML = `<div class="callout"><b>指標の並び（横1行）から ${items.length} 個の数値を検出</b>
+        <div style="margin:7px 0 4px">${asg.slots.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+          <span style="color:var(--cha);min-width:78px">${i === 0 ? 'いちばん左' : (i === asg.slots.length - 1 && asg.slots.length > 2) ? 'いちばん右' : (i + 1) + '番目'}</span>
+          <b class="num" style="min-width:64px;text-align:right">${esc(x.it.raw || String(x.it.v))}</b>
+          <select data-slot="${i}" style="width:auto;padding:4px 8px;font-size:12px">${['', 'reach', 'likes', 'comments', 'saves', 'shares', 'follows'].map(k => `<option value="${k}"${x.key === k ? ' selected' : ''}>${lbl[k]}</option>`).join('')}</select>
+        </div>`).join('')}</div>
+        <div style="font-size:11.5px">スクリーンショットの<b>指標が並んでいる行</b>を左から順に読み、左端＝リーチ／右端＝保存として割り当てています。<b>必ず画像と照合し、違っていれば右のメニューで付け替えてください</b>（画像そのものは保存されません）。</div></div>`;
+      el.querySelectorAll('select[data-slot]').forEach(sel => {
+        sel.onchange = () => {
+          const i = Number(sel.dataset.slot), k = sel.value;
+          if (k) form.elements[k].value = asg.slots[i].it.v;
+          asg.slots.forEach((x, j) => { if (j !== i && x.key === k) x.key = ''; });
+          asg.slots[i].key = k;
+          el.querySelectorAll('select[data-slot]').forEach(o2 => { o2.value = asg.slots[Number(o2.dataset.slot)].key; });
+          upd();
+        };
+      });
     } catch (err) {
       stat(`<div class="callout warn">自動読み取りを利用できませんでした（${esc(err && err.message ? err.message : 'エラー')}）。<b>画像を見ながら手入力してください。</b></div>`);
     }
@@ -2405,6 +2490,8 @@ function openInsightImport(id) {
   form.onsubmit = e => {
     e.preventDefault();
     const g = n => Number(form.elements[n].value) || 0;
+    const eng2 = g('likes') + g('comments') + g('saves') + g('shares');
+    if (g('reach') && eng2 > g('reach') && !confirm('ERが100%を超えています。読み取り値が誤っている可能性があります。このまま登録しますか？')) return;
     const data = {
       accountId: form.elements.accountId.value, date: form.elements.date.value, hour: 19,
       format: form.elements.format.value, reach: g('reach'), likes: g('likes'), comments: g('comments'),
