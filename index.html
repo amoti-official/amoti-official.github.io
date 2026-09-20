@@ -1312,6 +1312,7 @@ function storageOK() {
 }
 function save() {
   if (window.__PV) return;   // プレビュー内の操作は保存しない
+  try { recStamp(); } catch (e) {}
   try { DB.savedAt = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(DB)); }
   catch (e) {
     if (!_storeWarned) {
@@ -1319,6 +1320,7 @@ function save() {
       toast('この表示環境ではデータを保存できません（プレビュー枠の中など）。ファイルを直接開くか、公開URLでお使いください');
     }
   }  try { syncPushSoon(); } catch (e) {}
+  try { shSyncSoon(); } catch (e) {}
 }
 function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
 
@@ -4171,6 +4173,7 @@ refreshFilterSelects();
   if (!anchor) return;
   try { ensureFollowSyncCard(); } catch (e) {}
   try { ensureSyncCard(); } catch (e) {}
+  try { ensureSharedCard(); } catch (e) {}
   const host = anchor.closest('.card');
   if (!host) return;
   let raw = null; try { raw = localStorage.getItem(KEY); } catch (e) {}
@@ -4373,6 +4376,207 @@ function ensureSyncCard() {
   syncInfo();
 }
 setTimeout(() => { try { if (syncReady() && (DB.api.lastSyncAt || '') < ymd(TODAY)) syncPull(false); } catch (e) {} }, 1300);
+/* ========== 共有モード（複数人・複数端末で同じデータを共有） ========== */
+let _inSync = false, _shT = null, _lastPushed = '';
+function shCfg() { DB.api = DB.api || {}; return DB.api; }
+function shReady() { const c = DB.api || {}; return !!(String(c.shUrl || '').trim() && String(c.shWs || '').trim() && String(c.shToken || '').trim()); }
+function shBase() { return String((DB.api || {}).shUrl || '').trim().replace(/\/+$/, ''); }
+function shSay(h) { const el = document.getElementById('shMsg'); if (el) el.innerHTML = h; }
+function shInfo() {
+  const c = DB.api || {};
+  const ts = c.shLast ? ('最終同期 ' + esc(jDT(c.shLast))) : '未同期';
+  shSay('<div class="callout' + (shReady() ? '' : ' warn') + '"><b>状態：</b>' + (shReady() ? '共有モードで動作中（' + esc(c.shWs || '') + '）／' + ts : '未設定。ワークスペースを作成するか、既存のID・パスワードで参加してください') + '</div>');
+}
+async function sha256hex(txt) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function shMakeToken(url, ws, id, pw) { return await sha256hex(String(ws) + '::' + normCred(id) + '::' + String(pw)); }
+const REC_ARR = [['accounts', 'acc'], ['campaigns', 'camp'], ['posts', 'post']];
+const REC_KV = ['profile', 'bank', 'ui', 'checks'];
+function recSplit(db) {
+  const out = {};
+  REC_ARR.forEach(pair => (db[pair[0]] || []).forEach(r => { if (r && r.id) out[pair[1] + ':' + r.id] = r; }));
+  Object.keys(db.followLog || {}).forEach(a => { out['follow:' + a] = db.followLog[a]; });
+  REC_KV.forEach(k => { if (db[k] !== undefined) out['kv:' + k] = db[k]; });
+  return out;
+}
+function recJoin(recs, base) {
+  const db = Object.assign({}, base);
+  db.accounts = []; db.campaigns = []; db.posts = []; db.followLog = {};
+  REC_KV.forEach(k => { if (db[k] === undefined) db[k] = {}; });
+  Object.keys(recs).forEach(key => {
+    const i = key.indexOf(':'), p = key.slice(0, i), id = key.slice(i + 1), v = recs[key];
+    if (p === 'acc') db.accounts.push(v);
+    else if (p === 'camp') db.campaigns.push(v);
+    else if (p === 'post') db.posts.push(v);
+    else if (p === 'follow') db.followLog[id] = v;
+    else if (p === 'kv') db[k] = v;
+  });
+  return db;
+}
+function recMerge(a, b) {
+  const A = recSplit(a), B = recSplit(b);
+  const tombs = Object.assign({}, a.tombs || {});
+  Object.keys(b.tombs || {}).forEach(k => { tombs[k] = Math.max(Number(tombs[k] || 0), Number(b.tombs[k] || 0)); });
+  const out = {};
+  const keys = new Set(Object.keys(A).concat(Object.keys(B)));
+  keys.forEach(k => {
+    const x = A[k], y = B[k];
+    const tx = Number((x && x._t) || 0), ty = Number((y && y._t) || 0), td = Number(tombs[k] || 0);
+    if (td && td >= Math.max(tx, ty)) return;
+    if (x === undefined) { out[k] = y; return; }
+    if (y === undefined) { out[k] = x; return; }
+    out[k] = ty > tx ? y : x;
+  });
+  const t2 = {};
+  Object.keys(tombs).forEach(k => { if (!(k in out)) t2[k] = tombs[k]; });
+  const db = recJoin(out, a);
+  db.tombs = t2;
+  return db;
+}
+function recStamp() {
+  const snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
+  const cur = recSplit(DB);
+  const t = Date.now();
+  Object.keys(cur).forEach(k => {
+    const now = JSON.stringify(cur[k]);
+    if (snap[k] !== now) { cur[k]._t = t; snap[k] = JSON.stringify(cur[k]); }
+  });
+  DB.tombs = DB.tombs || {};
+  let changed = false;
+  Object.keys(snap).forEach(k => { if (!(k in cur)) { DB.tombs[k] = t; delete snap[k]; changed = true; } });
+  if (changed) { Object.keys(cur).forEach(k => { snap[k] = JSON.stringify(cur[k]); }); }
+  try { localStorage.setItem('amoti_snap', JSON.stringify(snap)); } catch (e) {}
+}
+async function shSync(manual) {
+  if (!shReady()) { if (manual) toast('先に共有モードを設定してください'); return; }
+  if (_inSync) return;
+  _inSync = true;
+  const c = DB.api || {};
+  const q = shBase() + '/?ws=' + encodeURIComponent(c.shWs) + '&token=' + encodeURIComponent(c.shToken);
+  try {
+    if (manual) shSay('<div class="callout">同期しています…</div>');
+    let remote = null;
+    const r = await fetch(q + '&t=' + Date.now(), { cache: 'no-store' });
+    if (r.status === 401) { shSay('<div class="callout warn"><b>IDまたはパスワードが違います。</b>共有IDとパスワードをご確認ください。</div>'); _inSync = false; return; }
+    if (r.ok) { const j = await r.json(); remote = (j && j.db) ? j.db : null; }
+    else if (r.status !== 404) throw new Error('HTTP ' + r.status);
+
+    let db = DB, got = 0;
+    if (remote) {
+      const before = JSON.stringify(recSplit(DB));
+      db = recMerge(DB, remote);
+      if (JSON.stringify(recSplit(db)) !== before) got = 1;
+    }
+    const payload = Object.assign({}, db, { api: {} });
+    const body = JSON.stringify(payload);
+    const needPush = body !== _lastPushed;
+    if (needPush) {
+      const pr = await fetch(q, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
+      if (!pr.ok) throw new Error('送信に失敗（HTTP ' + pr.status + '）');
+      _lastPushed = body;
+    }
+    DB.api.shLast = new Date().toISOString();
+    if (got) {
+      const keepApi = DB.api;
+      db.api = keepApi;
+      db.auth = DB.auth;
+      db.savedAt = DB.savedAt;
+      DB = normalize(db);
+      saveLocal(); refreshFilterSelects(); render();
+      toast('他の端末の更新を取り込みました');
+      shSay('<div class="callout"><b>取り込みました。</b>アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>');
+    } else {
+      saveLocal();
+      if (manual) shSay('<div class="callout">' + (needPush ? 'この端末の内容をサーバーへ送信しました。' : '最新の状態です（送信の必要なし）') + '</div>');
+    }
+    shInfo();
+  } catch (e) {
+    shSay('<div class="callout warn">同期できませんでした：' + esc(String((e && e.message) || e)) + '（WorkerのURL・CORS設定をご確認ください）</div>');
+  }
+  _inSync = false;
+}
+function saveLocal() {
+  try { DB.savedAt = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+}
+function shSyncSoon() {
+  if (!shReady() || _inSync || window.__PV) return;
+  if (_shT) clearTimeout(_shT);
+  _shT = setTimeout(() => { shSync(false); }, 1500);
+}
+async function shCreateOrJoin(mode) {
+  const url = (document.getElementById('shUrl').value || '').trim().replace(/\/+$/, '');
+  const ws = (document.getElementById('shWs').value || '').trim();
+  const id = (document.getElementById('shId').value || '').trim();
+  const pw = document.getElementById('shPw').value || '';
+  if (!url || !ws || !id || !pw) { shSay('<div class="callout warn">URL・ワークスペース名・共有ID・パスワードをすべて入力してください</div>'); return; }
+  const token = await shMakeToken(url, ws, id, pw);
+  const q = url + '/?ws=' + encodeURIComponent(ws) + '&token=' + encodeURIComponent(token);
+  try {
+    if (mode === 'create') {
+      const payload = Object.assign({}, DB, { api: {}, auth: undefined });
+      const r = await fetch(q, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (r.status === 409) { shSay('<div class="callout warn">そのワークスペース名は既に使われています。「参加する」で読み込むか、別の名前にしてください。</div>'); return; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      _lastPushed = JSON.stringify(payload);
+      shSay('<div class="callout"><b>ワークスペースを作成しました。</b>他のPC・スマホでは「共有モードに参加する」に同じURL・ワークスペース名・ID・パスワードを入れてください。</div>');
+    } else {
+      const r = await fetch(q + '&t=' + Date.now(), { cache: 'no-store' });
+      if (r.status === 401) { shSay('<div class="callout warn"><b>IDまたはパスワードが違います。</b>共有IDとパスワードをご確認ください。</div>'); return; }
+      if (r.status === 404) { shSay('<div class="callout warn">そのワークスペースは存在しません。ワークスペース名をご確認ください（新規作成なら「この端末のデータで開始」）。</div>'); return; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const remote = j && j.db ? j.db : null;
+      if (remote && Array.isArray(remote.accounts)) {
+        const merged = recMerge(DB, remote);
+        const keepApi = DB.api, keepAuth = DB.auth, keepAt = DB.savedAt;
+        merged.api = keepApi; merged.auth = keepAuth; merged.savedAt = keepAt;
+        merged.tombs = merged.tombs || {};
+        DB = normalize(merged);
+        DB.api = keepApi; DB.api.shUrl = url; DB.api.shWs = ws; DB.api.shToken = token;
+        saveLocal(); refreshFilterSelects(); render();
+      }
+      shSay('<div class="callout"><b>参加しました。</b>アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本（以後は自動で同期します）</div>');
+    }
+    const cc = shCfg();
+    cc.shUrl = url; cc.shWs = ws; cc.shToken = token; cc.shId = id; cc.shLast = new Date().toISOString();
+    saveLocal(); shInfo();
+    setTimeout(() => { shSync(false); }, 400);
+  } catch (e) {
+    shSay('<div class="callout warn">接続できませんでした：' + esc(String((e && e.message) || e)) + '（WorkerのURL・CORSをご確認ください）</div>');
+  }
+}
+function ensureSharedCard() {
+  const anchor = document.getElementById('btnWipe');
+  if (!anchor) return;
+  const host = anchor.closest('.card'); if (!host) return;
+  if (document.getElementById('sharedCard')) { shInfo(); return; }
+  const c = DB.api || {};
+  const card = document.createElement('div'); card.className = 'card'; card.id = 'sharedCard'; card.style.marginTop = '18px';
+  card.innerHTML = '<div class="card-h"><h2>共有モード（複数人・複数端末で同じデータ）</h2><span class="hint">Cloudflare Worker + KV</span></div>' +
+    '<div class="card-b">' +
+    '<div class="callout"><b>チームで1つのデータを共有します。</b>最初の1台で「ワークスペースを作成」→ 他のPC・スマホは同じ内容で「参加する」を押すと、同じデータが表示されます。以後は編集が自動送信され、開いている間は約20秒ごとに他の端末の更新を取り込みます。</div>' +
+    '<div class="field" style="margin-top:12px"><label>同期サーバーのURL</label><input id="shUrl" placeholder="https://amoti-sync.xxxx.workers.dev" value="' + esc(c.shUrl || '') + '"></div>' +
+    '<div class="field" style="margin-top:10px"><label>ワークスペース名（チーム共通の合言葉）</label><input id="shWs" placeholder="例：amoti-team" value="' + esc(c.shWs || '') + '"></div>' +
+    '<div class="field" style="margin-top:10px"><label>共有ID</label><input id="shId" placeholder="例：amoti" value="' + esc(c.shId || '') + '"></div>' +
+    '<div class="field" style="margin-top:10px"><label>共有パスワード</label><input id="shPw" type="password" placeholder="8文字以上を推奨"></div>' +
+    '<div class="inline" style="margin-top:12px">' +
+    '<button type="button" class="btn primary" id="shCreate">ワークスペースを作成（この端末のデータで開始）</button>' +
+    '<button type="button" class="btn" id="shJoin">参加する（サーバーのデータを読み込む）</button>' +
+    '<button type="button" class="btn ghost" id="shNow">今すぐ同期</button></div>' +
+    '<div id="shMsg" style="margin-top:12px;font-size:12px"></div>' +
+    '<div class="callout warn" style="margin-top:12px">データはご自身のCloudflare KVにのみ保存されます（パスワードそのものは保存せず、ID・パスワードから作った鍵で認証します）。同じレコードを2台で同時に編集した場合は、後から保存した方の内容が優先されます。</div>' +
+    '</div>';
+  host.parentNode.insertBefore(card, host);
+  document.getElementById('shCreate').onclick = () => shCreateOrJoin('create');
+  document.getElementById('shJoin').onclick = () => shCreateOrJoin('join');
+  document.getElementById('shNow').onclick = () => shSync(true);
+  shInfo();
+}
+setInterval(() => { try { if (shReady()) shSync(false); } catch (e) {} }, 20000);
+window.addEventListener('focus', () => { try { if (shReady()) shSync(false); } catch (e) {} });
+
 
 
 
