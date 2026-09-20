@@ -2405,6 +2405,9 @@ function openInsightImport(id) {
     <div class="field wide"><label>インサイト画像</label>
       <div class="ins-drop" id="insDrop">クリックして画像を選択 ／ ここにドロップ ／ Ctrl+V で貼り付け</div>
       <input type="file" id="insFile" accept="image/*" style="display:none"></div>
+    <div class="field wide"><label>AI読み取り（Genspark AI プロキシURL・任意）</label>
+      <input id="insProxy" value="${esc((DB.api && DB.api.aiProxy) || '')}" placeholder="https://amoti-ai.xxxx.workers.dev（未設定なら端末内OCRで読み取ります）" autocomplete="off">
+      <div style="font-size:10.5px;color:var(--cha);margin-top:4px">設定すると <b>Genspark AI（ビジョン）</b>が画像を読み取ります。URLはこの端末にのみ保存し、APIキーはWorker側に置きます。</div></div>
     <div class="field wide" id="insPrev"></div>
     <div class="field wide" id="insStat"></div>
     <div class="field"><label>リーチ *</label><input name="reach" type="number" min="0" required></div>
@@ -2419,6 +2422,8 @@ function openInsightImport(id) {
       <button type="submit" class="btn primary">この数値で登録</button>
     </div></form>`);
   const form = document.getElementById('insForm');
+  const pxEl = document.getElementById('insProxy');
+  if (pxEl) pxEl.oninput = () => { const k = apiKeys(); k.aiProxy = pxEl.value.trim(); save(); };
   const stat = h => { const el = document.getElementById('insStat'); if (el) el.innerHTML = h; };
   const upd = () => {
     const g = n => Number(form.elements[n].value) || 0;
@@ -2454,6 +2459,29 @@ function openInsightImport(id) {
     if (!file || !/^image\//.test(file.type || '')) { toast('画像ファイルを選んでください'); return; }
     const url = URL.createObjectURL(file);
     document.getElementById('insPrev').innerHTML = `<label>取り込んだ画像</label><img class="ins-shot" src="${url}" alt="取り込んだインサイト画像">`;
+    const proxyUrl = ((DB.api && DB.api.aiProxy) || '').trim();
+    if (proxyUrl) {
+      try {
+        stat('<span style="color:var(--cha)">Genspark AI が画像を読み取っています…（数秒かかります）</span>');
+        const fd = new FormData(); fd.append('image', file, 'insight.png');
+        const rs = await fetch(proxyUrl, { method: 'POST', body: fd });
+        const jj = await rs.json();
+        const mm = jj && jj.metrics;
+        if (mm) {
+          ['reach', 'likes', 'comments', 'saves', 'shares', 'follows'].forEach(k2 => {
+            if (mm[k2] !== undefined && mm[k2] !== null && mm[k2] !== '') form.elements[k2].value = Number(mm[k2]) || 0;
+          });
+          upd();
+          stat(`<div class="callout"><b>Genspark AI が読み取りました</b>（確度 ${esc(String(mm.confidence || '—'))}）
+            <div style="font-size:11.5px;margin-top:4px">リーチ <b class="num">${nf(Number(mm.reach) || 0)}</b> ／ いいね <b class="num">${nf(Number(mm.likes) || 0)}</b> ／ コメント <b class="num">${nf(Number(mm.comments) || 0)}</b> ／ 保存 <b class="num">${nf(Number(mm.saves) || 0)}</b> ／ シェア <b class="num">${nf(Number(mm.shares) || 0)}</b>${mm.note ? '<br>' + esc(String(mm.note)) : ''}</div>
+            <div style="font-size:11px;margin-top:4px;color:var(--cha)">数値は画像と照合してください。画像は保管されません。</div></div>`);
+          return;
+        }
+        stat(`<div class="callout warn">AIの応答を解釈できませんでした（${esc(String((jj && jj.error) || 'unknown'))}）。端末内OCRで読み取ります。</div>`);
+      } catch (err) {
+        stat(`<div class="callout warn">AIプロキシに接続できませんでした（${esc(String((err && err.message) || err))}）。端末内OCRで読み取ります。</div>`);
+      }
+    }
     stat('<span style="color:var(--cha)">読み取りを準備しています…</span>');
     try {
       const data = await ocrRun(file, stat, { scale: 2 });
