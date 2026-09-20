@@ -1655,8 +1655,18 @@ function campPosts(c) {
 }
 function campInsight(c) {
   const m = campPosts(c);
+  const byAcc = {};
+  m.forEach(p => {
+    const k = p.accountId || '';
+    if (!byAcc[k]) byAcc[k] = { reach: 0, saves: 0, shares: 0, posts: 0 };
+    byAcc[k].reach += Number(p.reach) || 0;
+    byAcc[k].saves += Number(p.saves) || 0;
+    byAcc[k].shares += Number(p.shares) || 0;
+    byAcc[k].posts++;
+  });
   return {
     posts: m,
+    byAcc,
     reach: m.reduce((s, p) => s + (Number(p.reach) || 0), 0),
     saves: m.reduce((s, p) => s + (Number(p.saves) || 0), 0),
     shares: m.reduce((s, p) => s + (Number(p.shares) || 0), 0),
@@ -1677,6 +1687,7 @@ function recDetail(c) {
       <div><span class="k">平均ER</span><b>${m.posts.length ? m.er.toFixed(2) + '%' : '—'}</b></div>
       <div><span class="k">保存 / シェア</span><b>${nf(m.saves)} / ${nf(m.shares)}</b></div>
     </div>
+    ${Object.keys(m.byAcc || {}).length > 1 ? `<div class="rec-note" style="margin-bottom:12px"><b>アカウント別</b>：${Object.entries(m.byAcc).map(([k, v]) => `${esc(accName(k))} リーチ ${nf(v.reach)}・ER ${pct(m.posts.filter(p => p.accountId === k).reduce((s, p) => s + metrics(p).er, 0) / Math.max(1, v.posts))}`).join(' ／ ')}</div>` : ''}
     ${c.note ? `<div class="rec-note">${esc(c.note)}</div>` : ''}
     ${m.posts.length ? `<div class="tw" style="margin-bottom:12px"><table>
       <thead><tr><th>投稿日</th><th>アカウント</th><th>形式</th><th class="num r">リーチ</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th></tr></thead>
@@ -1881,7 +1892,7 @@ function renderCampaigns() {
         <td class="num r">${yen(c.reward)}</td>
         <td class="num">${esc(jYMD(c.date))}${late ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800">期日超過</div>' : ''}</td>
         <td>${ins.posts.length
-          ? `<button class="ins-btn" data-ins-camp="${esc(c.id)}"><b>リーチ ${wan(ins.reach)}</b><span>ER ${ins.er.toFixed(2)}% ／ ${ins.posts.length}本</span></button>`
+          ? `<button class="ins-btn" data-ins-camp="${esc(c.id)}"><b>リーチ ${wan(ins.reach)}</b><span>ER ${ins.er.toFixed(2)}% ／ ${ins.posts.length}本${Object.keys(ins.byAcc || {}).length > 1 ? '・' + Object.keys(ins.byAcc).length + 'アカウント' : ''}</span></button>`
           : `<button class="ins-btn empty" data-ins-camp="${esc(c.id)}">＋ 画像を取り込む</button>`}</td>
         <td><div class="st-seg" data-st="${esc(c.id)}">${STATUSES.map(x => {
           const on = x === c.status;
@@ -2427,18 +2438,22 @@ function openFollowShot(aid) {
     toast(a.name + ' のフォロワーを ' + nf(v) + ' で記録しました');
   };
 }
-function openInsightImport(id) {
+function openInsightImport(id, accountId) {
   const c = campById(id); if (!c) return;
   const accs = campAccs(c);
   const pool = accs.length ? accs : DB.accounts;
-  const exists = DB.posts.filter(pp => pp.campaignId === c.id).sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
+  const all = DB.posts.filter(pp => pp.campaignId === c.id).sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
+  const pick = accountId || (all[0] && all[0].accountId) || (pool[0] && pool[0].id);
+  const exists = all.filter(pp => pp.accountId === pick);
   const existingPost = exists[0] || null;
   const ex = existingPost || {};
+  const exAll = {}; all.forEach(pp => { if (!exAll[pp.accountId]) exAll[pp.accountId] = pp; });
   if (!pool.length) { toast('先にアカウントを登録してください'); return; }
   openModal('インサイト画像を取り込む', `<form id="insForm" class="fgrid">
     <div class="field wide"><div class="callout">投稿のスクリーンショットから数値を読み取って自動入力します。<b>指標が並んでいる行を左から順に</b>割り当てます（読み取り後に検出一覧で付け替えできます）。<b>結果は必ず画像と照合してください。</b>「12.3万」のような省略表記や小さい数字は読み取れないことがあります。画像そのものは保存されません。</div></div>
-    ${existingPost ? `<div class="field wide"><div class="callout"><b>この案件の登録済みインサイトを表示しています</b>（登録 ${exists.length}件・投稿日 ${esc(ex.date ? jYMD(ex.date) : '—')} ／ ${esc(accName(ex.accountId))}）。保存すると<b>上書き更新</b>され、重複登録されません。</div></div>` : ''}
-    <div class="field"><label>対象アカウント</label><select name="accountId">${pool.map(a => `<option value="${esc(a.id)}"${ex.accountId === a.id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
+    ${existingPost ? `<div class="field wide"><div class="callout"><b>この案件の登録済みインサイトを表示しています</b>（このアカウントの登録 ／ 投稿日 ${esc(ex.date ? jYMD(ex.date) : '—')} ／ 案件全体で ${all.length}件・${Object.keys(exAll).length}アカウント）。保存すると<b>上書き更新</b>され、重複登録されません。</div></div>` : ''}
+    <div class="field"><label>対象アカウント（${pool.length}）</label><select name="accountId" id="insAcc">${pool.map(a => `<option value="${esc(a.id)}"${pick === a.id ? ' selected' : ''}>${esc(a.name)}${exAll[a.id] ? '（登録済み）' : ''}</option>`).join('')}</select></div>
+    ${pool.length > 1 ? `<div class="field wide"><div class="callout"><b>複数アカウントの案件です</b>（${pool.length}アカウント）。<b>アカウントごとに1件ずつ</b>インサイトを登録でき、同じ案件でも別々に集計されます。登録済みのアカウント名には「（登録済み）」が付きます。アカウントを切り替えると、そのアカウントの登録内容を読み込みます。</div></div>` : ''}
     <div class="field"><label>投稿日</label><input name="date" type="date" value="${esc(ex.date || ymd(TODAY))}"></div>
     <div class="field"><label>形式</label><select name="format">${FORMATS.map(f => `<option ${(ex.format || 'リール') === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
     <div class="field"><label>案件</label><input value="${esc(campTitle(c))}" readonly></div>
@@ -2497,9 +2512,16 @@ function openInsightImport(id) {
   document.getElementById('insCancel').onclick = () => { cleanup(); closeModal(); };
   const insDelBtn = document.getElementById('insDel');
   if (insDelBtn) insDelBtn.onclick = () => {
-    if (!confirm('この案件のインサイト登録を削除しますか？（案件そのものは残ります）')) return;
-    DB.posts = DB.posts.filter(x => x.id !== existingPost.id);
+    const aid = form.elements.accountId.value;
+    if (!confirm(accName(aid) + ' のインサイト登録を削除しますか？（他のアカウントの登録は残ります）')) return;
+    DB.posts = DB.posts.filter(x => !(x.campaignId === c.id && x.accountId === aid));
     save(); cleanup(); closeModal(); render(); toast('インサイトを削除しました');
+  };
+  const accSelEl = document.getElementById('insAcc');
+  if (accSelEl && pool.length > 1) accSelEl.onchange = () => {
+    const prev = document.getElementById('insPrev');
+    if (prev && prev.innerHTML && !confirm('アカウントを切り替えると、読み取った数値はリセットされます。よろしいですか？')) { accSelEl.value = pick; return; }
+    cleanup(); closeModal(); openInsightImport(c.id, accSelEl.value);
   };
   document.body.dataset.insOpen = '1';
   document.addEventListener('paste', onPaste);
@@ -2589,13 +2611,14 @@ function openInsightImport(id) {
       saves: g('saves'), shares: g('shares'), replies: g('replies'),
       campaignId: c.id, tags: [], note: ''
     };
-    if (existingPost) {
-      Object.assign(existingPost, data);
-      save(); cleanup(); closeModal(); render(); toast('インサイトを更新しました');
+    const sameReg = DB.posts.find(pp => pp.campaignId === c.id && pp.accountId === data.accountId);
+    if (sameReg) {
+      Object.assign(sameReg, data);
+      save(); cleanup(); closeModal(); render(); toast('インサイトを更新しました（' + accName(data.accountId) + '）');
     } else {
       DB.posts.push(Object.assign({ id: uid('p') }, data));
       expandedCamps.add(c.id);
-      save(); cleanup(); closeModal(); render(); toast('インサイトを登録しました');
+      save(); cleanup(); closeModal(); render(); toast('インサイトを登録しました（' + accName(data.accountId) + '）');
     }
   };
 }
