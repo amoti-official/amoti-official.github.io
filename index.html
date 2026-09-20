@@ -530,8 +530,13 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .pd-opt:hover{border-color:var(--mori-3);color:var(--mori)}
 .pd-opt.on{background:var(--mori);border-color:var(--mori);color:var(--kome)}
 .ins-btn.done b{color:var(--mori)}
-.ins-acc{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--kome);width:100%}
-.ins-acc label{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--sumi);cursor:pointer}
+.ins-acc{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--kome);width:100%}
+.ins-acc label{display:grid;grid-template-columns:auto 1fr;column-gap:9px;row-gap:1px;align-items:center;font-size:12.5px;font-weight:700;color:var(--sumi);cursor:pointer;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:transparent}
+.ins-acc label:hover{border-color:var(--cha)}
+.ins-acc label:has(input:checked){border-color:var(--mori);background:rgba(23,135,106,.06)}
+.ins-acc input{width:auto;grid-row:span 2;accent-color:var(--mori)}
+.ins-acc .an{overflow-wrap:anywhere;line-height:1.35}
+.ins-acc .am{grid-column:2;font-size:11px;font-weight:400;color:var(--cha)}
 .inv-sheet{background:#fff;color:#231018;padding:30px 34px;border-radius:8px;font-size:12px;line-height:1.7;font-family:var(--sans)}
 .inv-sheet h1{font-family:var(--mincho);font-size:24px;letter-spacing:.22em;margin:0 0 4px}
 .inv-sheet table{width:100%;border-collapse:collapse;font-size:12px;background:none}
@@ -876,7 +881,7 @@ html{zoom:.7}
       <div class="card" style="margin:0 0 16px"><div class="card-b">
         <div class="inline">
           <div class="field" style="flex:1 1 200px"><label>キーワード</label>
-            <input type="search" id="cSearch" placeholder="クライアント名・案件名・メモ"></div>
+            <input type="search" id="cSearch" placeholder="クライアント名・メモ"></div>
           <div class="field" style="flex:0 1 150px"><label>ステータス</label><select id="cStatus"></select></div>
           <div class="field" style="flex:0 1 140px"><label>種別</label><select id="cType"></select></div>
           <div class="field" style="flex:0 1 160px"><label>アカウント</label><select id="cAccount"></select></div>
@@ -1312,6 +1317,9 @@ function metrics(p) {
 }
 const campAccIds    = c => (Array.isArray(c.accountIds) ? c.accountIds : []).filter(id => accById(id));
 const campAccs      = c => campAccIds(c).map(accById);
+function campTitle(c){ return c.title || c.client || '（無題）'; }
+function campHead(c){ const sub=[]; if (c.title && c.client) sub.push(esc(c.client)); if (c.dropped) sub.push('<b>見送り</b>');
+  return `<b>${esc(campTitle(c))}</b>` + (sub.length ? `<div style="font-size:11px;color:var(--cha)">${sub.join(' · ')}</div>` : ''); }
 const campAccNames  = c => { const l = campAccs(c); return l.length ? l.map(a => a.name).join(' / ') : '（未設定）'; };
 const campFollowers = c => campAccIds(c).reduce((s, id) => s + (Number(accById(id)?.followers) || 0), 0);
 const cUnit = c => { const f = campFollowers(c); return f ? (Number(c.reward) || 0) / f : 0; };
@@ -1560,7 +1568,7 @@ function dashAlerts() {
     if (c.status !== '入金済' && !c.invoice && (posted || (d && d <= TODAY))) {
       const late = d ? ddiff(c.date, t) : 0;
       out.push({ sev: (posted || late > 7) ? 'high' : 'mid', camp: c, kind: '未請求',
-        msg: '請求書が未発行です', hint: `${yen(c.reward)} ／ 支払サイト ${c.payTerm || 30}日` });
+        msg: '請求書が未発行です', hint: `${yen(c.reward)}` });
     }
     if (c.status === '請求中') {
       const base = parseD(c.invoicedAt) || d;
@@ -1570,7 +1578,7 @@ function dashAlerts() {
       out.push({ sev: over > 5 ? 'high' : days >= term - 5 ? 'mid' : 'low', camp: c, kind: '未入金',
         msg: over > 5 ? `支払期限を ${over} 日過ぎても入金が確認できていません`
           : days >= term - 5 ? 'まもなく支払期限です（入金未確認）' : '入金がまだ確認できていません',
-        hint: `${c.invoice || '請求書 未発行'} ／ 支払サイト ${term}日` });
+        hint: `${c.invoice ? '請求書 発行済' : '請求書 未発行'}` });
     }
   });
   const kOrd = { '未投稿': 0, '未請求': 1, '未入金': 2 };
@@ -1634,9 +1642,6 @@ function recDetail(c) {
       <div><span class="k">投稿日</span><b>${esc(dFull(c.date))}</b></div>
       <div><span class="k">報酬額</span><b>${yen(c.reward)}</b></div>
       <div><span class="k">ステータス</span><b>${esc(c.status)}${c.dropped ? '（見送り）' : ''}</b></div>
-      <div><span class="k">請求書番号</span><b>${esc(c.invoice || '未発行')}${(c.invoiceHistory || []).length ? `（再発行 ${c.invoiceHistory.length}回）` : ''}</b></div>
-      <div><span class="k">支払サイト</span><b>${esc(c.payTerm || 0)}日</b></div>
-      <div><span class="k">PR表記</span><b>${c.pr ? (c.prSet ? '設定済' : '未設定') : '不要'}</b></div>
       <div><span class="k">単価の目安</span><b>${yen(campFollowers(c) * 2)}〜${yen(campFollowers(c) * 4)}</b></div>
       <div><span class="k">インサイト取込</span><b>${m.posts.length}本</b></div>
       <div><span class="k">実績リーチ</span><b>${nf(m.reach)}</b></div>
@@ -1746,14 +1751,14 @@ function renderAlerts() {
   const tone = k => k === '未投稿' ? 'var(--shu)' : k === '未請求' ? 'var(--kohaku)' : 'var(--mori-3)';
   document.getElementById('dashAlerts').innerHTML = cam.length ? `<table>
     <thead><tr>
-      <th style="width:92px">種別</th><th style="width:320px">内容</th><th>案件名 / クライアント</th>
+      <th style="width:92px">種別</th><th style="width:320px">内容</th><th>クライアント / 店舗名</th>
       <th style="width:180px">アカウント</th><th class="num r" style="width:96px">報酬額</th>
       <th style="width:86px">投稿日</th><th style="width:112px">ステータス</th>
     </tr></thead>
     <tbody>${cam.map(a => { const c = a.camp; const tn = tone(a.kind); return `<tr data-open-camp="${esc(c.id)}" style="cursor:pointer">
       <td><span class="chip" style="background:${tn};border-color:${tn};color:#fff">${esc(a.kind)}</span>${a.sev === 'high' ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800;margin-top:3px">優先</div>' : ''}</td>
       <td><b style="font-size:12.5px">${esc(a.msg)}</b><div style="font-size:11px;color:var(--cha)">${esc(a.hint)}</div></td>
-      <td><b>${esc(c.title)}</b><div style="font-size:11px;color:var(--cha)">${esc(c.client)}</div></td>
+      <td>${campHead(c)}</td>
       <td style="font-size:11.5px">${esc(campAccNames(c))}</td>
       <td class="num r">${yen(c.reward)}</td>
       <td class="num">${esc(dLabel(c.date))}</td>
@@ -1791,20 +1796,20 @@ function renderCampaigns() {
   const sevDot = a => a.sev === 'high' ? 'var(--shu)' : a.sev === 'mid' ? 'var(--kohaku)' : 'var(--mori-3)';
   document.getElementById('dashAlerts').innerHTML = (cam.length ? `<table>
     <thead><tr>
-      <th style="width:280px">理由</th><th>案件名 / クライアント</th><th style="width:190px">アカウント</th>
+      <th style="width:280px">理由</th><th>クライアント / 店舗名</th><th style="width:190px">アカウント</th>
       <th class="num r" style="width:96px">報酬額</th><th style="width:86px">投稿日</th><th style="width:116px">ステータス</th>
     </tr></thead>
     <tbody>${cam.map(a => { const c = a.camp; return `<tr data-open-camp="${esc(c.id)}" style="cursor:pointer">
       <td><div style="display:flex;gap:8px;align-items:flex-start">
         <span style="flex:0 0 6px;width:6px;height:6px;border-radius:50%;margin-top:6px;background:${sevDot(a)}"></span>
         <span><b style="font-size:12.5px">${esc(a.msg)}</b><div style="font-size:11px;color:var(--cha)">${esc(a.hint)}</div></span></div></td>
-      <td><b>${esc(c.title)}</b><div style="font-size:11px;color:var(--cha)">${esc(c.client)}</div></td>
+      <td>${campHead(c)}</td>
       <td style="font-size:11.5px">${esc(campAccNames(c))}</td>
       <td class="num r">${yen(c.reward)}</td>
       <td class="num">${esc(dLabel(c.date))}</td>
       <td><span class="stamp ${STATUS_CLS[c.status] || ''}">${esc(c.status)}</span></td>
     </tr>`; }).join('')}</tbody></table>`
-    : emptyBox('期日超過・未請求・PR表記の抜けはありません。すべて整っています。'))
+    : emptyBox('期日超過・未請求・未入金はありません。すべて整っています。'))
     + (acc.length ? `<div class="callout warn" style="margin:0 14px 14px"><b>アカウント側の注意</b><div style="margin-top:6px">${acc.map(a => `${esc(a.acc.name)}：${esc(a.msg)}`).join('<br>')}</div></div>` : '');
 }
 function renderCampaigns() {
@@ -1817,7 +1822,7 @@ function renderCampaigns() {
     <thead><tr>
       <th style="width:30px"></th>
       <th style="width:114px">訪問日時</th>
-      <th>案件名 / クライアント</th>
+      <th>クライアント / 店舗名</th>
       <th style="width:170px">アカウント</th>
       <th class="num r" style="width:92px">報酬額</th>
       <th style="width:84px">投稿日</th>
@@ -1836,7 +1841,7 @@ function renderCampaigns() {
       return `<tr class="rec ${open ? 'open' : ''}" data-rec="${esc(c.id)}">
         <td><span class="rec-dot" style="background:${flag}" title="${c.dropped ? '見送り' : c.status}"></span></td>
         <td class="num">${v ? esc(fmtDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}</td>
-        <td><b>${esc(c.title)}</b><div style="font-size:11px;color:var(--cha)">${esc(c.client)}${c.dropped ? ' · <b>見送り</b>' : ''}</div></td>
+        <td>${campHead(c)}</td>
         <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0">${esc(a.name)}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
         <td class="num r">${yen(c.reward)}</td>
         <td class="num">${esc(dLabel(c.date))}${late ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800">期日超過</div>' : ''}</td>
@@ -1848,7 +1853,7 @@ function renderCampaigns() {
           return `<button type="button" class="st-opt ${on ? 'on' : ''}" data-set-st="${esc(x)}"${on ? ` style="background:${ST_COLOR[x]};border-color:${ST_COLOR[x]};color:${ST_FG[x] || '#fff'}"` : ''} title="${on ? '現在のステータス' : 'クリックで ' + esc(x) + ' に変更'}">${esc(x)}</button>`;
         }).join('')}</div></td>
         <td>${c.invoice
-          ? `<button class="ins-btn done" data-inv="${esc(c.id)}"><b>発行済 ${esc(c.invoice)}</b><span>再発行・印刷</span></button>`
+          ? `<button class="ins-btn done" data-inv="${esc(c.id)}"><b>発行済</b><span>再発行・印刷</span></button>`
           : `<button class="btn sm" data-inv="${esc(c.id)}">発行</button>`}</td>
         <td class="r"><span class="rec-caret">▶</span></td>
       </tr>` + (open ? recDetail(c) : '');
@@ -1861,22 +1866,14 @@ function campForm(c, presetAcc) {
   const d = Object.assign({}, blank, c || {});
   const ids = Array.isArray(d.accountIds) ? d.accountIds : [];
   return `<form id="campForm" class="fgrid">
-    <div class="field"><label>案件名 *</label><input name="title" required value="${esc(d.title)}" placeholder="新作スイーツのPRリール"></div>
-    <div class="field"><label>クライアント / 店舗名 *</label><input name="client" required value="${esc(d.client)}" placeholder="株式会社◯◯ / ◯◯食堂"></div>
+    <div class="field wide"><label>クライアント / 店舗名 *</label><input name="client" required value="${esc(d.client)}" placeholder="株式会社◯◯ / ◯◯食堂"></div>
     <div class="field wide"><label>投稿アカウント（同じ店舗に別アカウントで訪問する場合は複数選択）</label>
-      <div class="ins-acc">${DB.accounts.map(a => `<label><input type="checkbox" name="accountIds" value="${esc(a.id)}" ${ids.indexOf(a.id) >= 0 ? 'checked' : ''}> ${esc(a.name)} <span style="color:var(--cha);font-weight:400;font-size:11px">（${esc(a.platform)} / ${wan(a.followers)}）</span></label>`).join('') || '<span style="font-size:12px;color:var(--cha)">アカウントが未登録です</span>'}</div></div>
+      <div class="ins-acc">${DB.accounts.map(a => `<label><input type="checkbox" name="accountIds" value="${esc(a.id)}" ${ids.indexOf(a.id) >= 0 ? 'checked' : ''}><span class="an">${esc(a.name)}</span><span class="am">${esc(a.platform)} / ${wan(a.followers)}</span></label>`).join('') || '<span style="font-size:12px;color:var(--cha)">アカウントが未登録です</span>'}</div></div>
     <div class="field"><label>訪問日時（撮影・試食）</label><input name="visitAt" type="datetime-local" value="${esc(d.visitAt || '')}"></div>
     <div class="field"><label>投稿日 / 投稿予定日</label><input name="date" type="date" value="${esc(d.date)}"></div>
     <div class="field"><label>報酬額（税込・円）</label><input name="reward" type="number" min="0" step="1000" value="${esc(d.reward)}"></div>
     <div class="field"><label>ステータス</label><select name="status">${STATUSES.map(x => `<option ${x === d.status ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>種別</label><select name="type">${TYPES.map(t => `<option ${t === d.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
-    <div class="field"><label>支払サイト（日）</label><input name="payTerm" type="number" min="0" step="5" value="${esc(d.payTerm)}"></div>
-    <div class="field"><label>請求書番号</label><input name="invoice" value="${esc(d.invoice)}" placeholder="空欄なら発行時に自動採番"></div>
-    <div class="field"><label>PR表記</label>
-      <div class="inline" style="padding-top:4px">
-        <label class="switch"><input type="checkbox" name="pr" ${d.pr ? 'checked' : ''}> 必要</label>
-        <label class="switch"><input type="checkbox" name="prSet" ${d.prSet ? 'checked' : ''}> 設定済</label>
-      </div></div>
     <div class="field wide"><label>メモ</label><textarea name="note" placeholder="条件・二次利用・NG事項など">${esc(d.note)}</textarea></div>
     <div class="field wide"><div class="callout" id="cfUnit"></div></div>
     <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
@@ -1919,10 +1916,9 @@ function openCamp(id, presetAcc) {
     const accountIds = [...form.querySelectorAll('input[name="accountIds"]:checked')].map(x => x.value);
     if (!accountIds.length) { toast('投稿アカウントを1つ以上選んでください'); return; }
     const data = {
-      title: v('title').trim(), client: v('client').trim(), accountIds,
+      client: v('client').trim(), accountIds,
       type: v('type'), reward: Number(v('reward')) || 0, status: v('status'),
-      date: v('date'), visitAt: v('visitAt'), payTerm: Number(v('payTerm')) || 0,
-      invoice: v('invoice').trim(), pr: form.elements.pr.checked, prSet: form.elements.prSet.checked,
+      date: v('date'), visitAt: v('visitAt'),
       note: v('note').trim()
     };
     if (c) Object.assign(c, data);
@@ -2962,7 +2958,7 @@ function renderSchedule() {
           const hh = e.kind === 'visit' ? String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0') : '';
           return `<button class="cal-ev ${e.kind}" data-open-camp="${esc(e.camp.id)}" title="${esc(e.camp.client)} / ${esc(e.camp.title)}">
             <span class="ce-top">${hh ? `<b>${esc(hh)}</b>` : ''}${esc(e.accId ? accName(e.accId) : campAccNames(e.camp))}</span>
-            <span class="ce-title">${esc(e.camp.title)}</span>
+            <span class="ce-title">${esc(campTitle(e.camp))}</span>
           </button>`;
         }).join('')}</div>
         ${list.length > 3 ? `<div class="cal-more">＋${list.length - 3}件</div>` : ''}
@@ -2974,7 +2970,7 @@ function renderSchedule() {
   document.getElementById('schedDay').innerHTML = `<div class="card">
     <div class="card-h">
       <h2>${sd.getMonth() + 1}/${sd.getDate()}（${['日','月','火','水','木','金','土'][sd.getDay()]}）の予定</h2>
-      <span class="hint" style="margin-left:0">アカウント名 / 案件名 / 訪問時間</span>
+      <span class="hint" style="margin-left:0">アカウント名 / 訪問時間</span>
       <span class="hint">${r.t} · ${dayList.length}件</span>
     </div>
     <div class="card-b">${dayList.length ? dayList.map(schRow).join('')
@@ -3317,7 +3313,7 @@ function renderTrends() {
     <tbody>${rows.map(({ c, unit }) => {
       const [lo, hi] = [2, 4];
       const lab = unit < lo ? '<span style="color:var(--shu)">低め</span>' : unit > hi ? '<span style="color:var(--kohaku)">高め</span>' : '<span style="color:var(--ok)">適正</span>';
-      return `<tr><td><b>${esc(c.title)}</b><div style="font-size:11px;color:var(--cha)">${esc(c.client)}</div></td>
+      return `<tr><td>${campHead(c)}</td>
         <td style="font-size:11.5px">${esc(campAccNames(c))}</td>
         <td class="num r">${yen(c.reward)}</td>
         <td class="num r"><b>${unit.toFixed(2)}</b>円</td>
@@ -3786,9 +3782,8 @@ document.getElementById('btnExportCsv').onclick = () => {
   toast('CSVを書き出しました');
 };
 document.getElementById('btnExportCampCsv').onclick = () => {
-  const rows = DB.campaigns.map(c => [c.date, c.visitAt || '', c.client, c.title, campAccNames(c), c.type, c.reward, cUnit(c).toFixed(2), c.status,
-    c.pr ? '必要' : '不要', c.prSet ? '設定済' : '未設定', c.invoice, c.payTerm, c.note]);
-  dl('campaigns-' + ymd(TODAY) + '.csv', toCsv(['投稿日','訪問日時','クライアント','案件名','アカウント','種別','報酬','フォロワー単価','ステータス','PR表記','PR表記設定','請求書番号','支払サイト','メモ'], rows), 'text/csv');
+  const rows = DB.campaigns.map(c => [c.date, c.visitAt || '', c.client, campAccNames(c), c.type, c.reward, cUnit(c).toFixed(2), c.status, c.invoice ? '発行済' : '未発行', c.note]);
+  dl('campaigns-' + ymd(TODAY) + '.csv', toCsv(['投稿日','訪問日時','クライアント','アカウント','種別','報酬','フォロワー単価','ステータス','請求書','メモ'], rows), 'text/csv');
   toast('CSVを書き出しました');
 };
 document.getElementById('fileImport').addEventListener('change', e => {
@@ -3856,11 +3851,11 @@ function buildBrief() {
     + ' ／ 入金済 ' + yen(DB.campaigns.filter(c => c.status === '入金済').reduce((s, c) => s + (Number(c.reward) || 0), 0))
     + ' ／ 未入金 ' + yen(DB.campaigns.filter(c => ['投稿済', '請求済'].includes(c.status)).reduce((s, c) => s + (Number(c.reward) || 0), 0)));
   L.push('');
-  L.push('| 投稿日 | クライアント | 案件名 | アカウント | 種別 | 報酬 | 円/フォロワー | ステータス | PR表記 | 支払サイト |');
-  L.push('|---|---|---|---|---|---:|---:|---|---|---:|');
+  L.push('| 投稿日 | クライアント | アカウント | 種別 | 報酬 | 円/フォロワー | ステータス |');
+  L.push('|---|---|---|---|---:|---:|---|');
   DB.campaigns.forEach(c => {
-    L.push('| ' + [dFull(c.date), cell(c.client), cell(c.title), cell(campAccNames(c)), cell(c.type), nf(c.reward),
-      cUnit(c).toFixed(2), cell(c.status), (c.pr ? (c.prSet ? '設定済' : '未設定') : '不要'), (c.payTerm || 0) + '日'].join(' | ') + ' |');
+    L.push('| ' + [dFull(c.date), cell(c.client), cell(campAccNames(c)), cell(c.type), nf(c.reward),
+      cUnit(c).toFixed(2), cell(c.status)].join(' | ') + ' |');
   });
   L.push('');
 
