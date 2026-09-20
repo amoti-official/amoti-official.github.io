@@ -6,7 +6,7 @@
 <title>AMOTI</title>
 <meta name="description" content="グルメ系インフルエンサーのための案件・インサイト管理ツール。複数SNSアカウントの案件管理、投稿分析、2026年の仕様変更とステマ規制チェックを1つに。">
 <link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#14483C">
+<meta name="theme-color" content="#1B0510">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="AMOTI">
@@ -21,20 +21,20 @@
    ============================================================ */
 :root{
   --sumi:#141C18;      /* 墨 */
-  --mori:#14483C;      /* 瓶の深緑 */
-  --mori-2:#1C5C4C;
-  --mori-3:#2E8068;
+  --mori:#1B0510;      /* 瓶の深緑 */
+  --mori-2:#C80850;
+  --mori-3:#C80850;
   --mori-pale:#E4EDE8;
-  --kohaku:#DE9C1E;    /* 琥珀 */
+  --kohaku:#F8D010;    /* 琥珀 */
   --kohaku-pale:#FBF0D6;
-  --shu:#CF3E27;       /* 朱 */
+  --shu:#F84060;       /* 朱 */
   --shu-pale:#FBE7E2;
-  --kinari:#F4F0E5;    /* 生成り */
+  --kinari:#FBF3F1;    /* 生成り */
   --kome:#FFFFFF;      /* 白米 */
-  --cha:#8C7A5F;       /* 茶 */
+  --cha:#8A6E78;       /* 茶 */
   --line:#DED5C1;
   --line-soft:#EAE3D2;
-  --ok:#1E7A55;
+  --ok:#17876A;
 
   --sans:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
   --mincho:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
@@ -519,10 +519,10 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .pv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;color:#DCE8E2;font-size:12px;font-family:var(--mono)}
 .pv-dev{display:inline-flex;gap:6px}
 .pv-dev button{border:1px solid rgba(220,232,226,.34);background:transparent;color:#C3D6CE;border-radius:99px;padding:6px 13px;font-size:11.5px;font-weight:700;min-height:34px}
-.pv-dev button.on{background:var(--kohaku);border-color:var(--kohaku);color:#16211D}
+.pv-dev button.on{background:var(--kohaku);border-color:var(--kohaku);color:#C80850}
 .pv-close{border:0;background:transparent;color:#DCE8E2;font-size:24px;line-height:1;padding:2px 8px}
-.pv-phone{width:390px;height:min(844px,calc(100vh - 150px));max-width:100%;flex:0 0 auto;background:#0E1A16;
-  border:11px solid #0F1714;border-radius:46px;overflow:hidden;
+.pv-phone{width:390px;height:min(844px,calc(100vh - 150px));max-width:100%;flex:0 0 auto;background:#C80850;
+  border:11px solid #C80850;border-radius:46px;overflow:hidden;
   box-shadow:0 34px 80px -34px #000, inset 0 0 0 1px rgba(255,255,255,.09)}
 .pv-phone iframe{width:100%;height:100%;border:0;background:var(--kinari);display:block}
 .pv-note{color:#9DB5AC;font-size:11.5px;text-align:center;max-width:440px}
@@ -1977,7 +1977,7 @@ function invoiceBody(c) {
   return `<div class="inv-sheet">
     <div class="inv-meta">
       <div><h1>請求書</h1><div style="font-size:11px;color:#6B6558;letter-spacing:.2em">INVOICE</div>
-        ${(c.invoiceHistory || []).length ? '<div style="display:inline-block;margin-top:7px;padding:2px 9px;border:1px solid #CF3E27;color:#CF3E27;font-size:10.5px;font-weight:700;border-radius:3px;letter-spacing:.08em">再発行</div>' : ''}</div>
+        ${(c.invoiceHistory || []).length ? '<div style="display:inline-block;margin-top:7px;padding:2px 9px;border:1px solid #F84060;color:#F84060;font-size:10.5px;font-weight:700;border-radius:3px;letter-spacing:.08em">再発行</div>' : ''}</div>
       <div style="text-align:right;font-size:11.5px">
         <div>請求書番号 <b>${esc(c.invoice || nextInvoiceNo(parseD(c.date) || TODAY))}</b></div>
         <div>発行日 ${esc(jDate(issued))}</div>
