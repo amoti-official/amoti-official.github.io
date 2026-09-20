@@ -537,6 +537,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 .ins-acc input{width:auto;grid-row:span 2;accent-color:var(--mori)}
 .ins-acc .an{overflow-wrap:anywhere;line-height:1.35}
 .ins-acc .am{grid-column:2;font-size:11px;font-weight:400;color:var(--cha)}
+.ins-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px}
 .inv-sheet{background:#fff;color:#231018;padding:30px 34px;border-radius:8px;font-size:12px;line-height:1.7;font-family:var(--sans)}
 .inv-sheet h1{font-family:var(--mincho);font-size:24px;letter-spacing:.22em;margin:0 0 4px}
 .inv-sheet table{width:100%;border-collapse:collapse;font-size:12px;background:none}
@@ -617,6 +618,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 
   .field input,.field select,.field textarea{font-size:16px;padding:11px 12px}
   .field label{font-size:11.5px}
+  .ins-metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 8px}
   .btn{min-height:42px;padding:10px 14px;font-size:13px}
   .btn.sm{min-height:38px;padding:8px 12px;font-size:12.5px}
   .modal-f{justify-content:stretch}
@@ -1313,7 +1315,7 @@ const accFollowers = id => { const a = accById(id); return a ? (Number(a.followe
 /* 派生指標 */
 function metrics(p) {
   const reach = Number(p.reach) || 0;
-  const eng = (Number(p.likes)||0) + (Number(p.comments)||0) + (Number(p.saves)||0) + (Number(p.shares)||0);
+  const eng = (Number(p.likes)||0) + (Number(p.comments)||0) + (Number(p.replies)||0) + (Number(p.saves)||0) + (Number(p.shares)||0);
   return {
     reach, eng,
     er: reach ? eng / reach * 100 : 0,
@@ -2194,7 +2196,7 @@ function ocrInsightItems(data) {
   return uniq;
 }
 function insightAssign(items) {
-  const o = { reach: '', likes: '', comments: '', saves: '', shares: '' };
+  const o = { reach: '', likes: '', comments: '', saves: '', shares: '', replies: '' };
   const slots = (items || []).map(it => ({ it, key: '' }));
   const n = slots.length;
   if (!n) return { o, slots };
@@ -2438,12 +2440,14 @@ function openInsightImport(id) {
       <div style="font-size:10.5px;color:var(--cha);margin-top:4px">設定すると <b>Genspark AI（ビジョン）</b>が画像を読み取ります。URLはこの端末にのみ保存し、APIキーはWorker側に置きます。</div></div>
     <div class="field wide" id="insPrev"></div>
     <div class="field wide" id="insStat"></div>
-    <div class="field"><label>リーチ *</label><input name="reach" type="number" value="${ex.reach !== undefined && ex.reach !== null ? esc(ex.reach) : ''}" min="0" required></div>
-    <div class="field"><label>いいね</label><input name="likes" type="number" value="${ex.likes !== undefined && ex.likes !== null ? esc(ex.likes) : ''}" min="0"></div>
-    <div class="field"><label>コメント</label><input name="comments" type="number" value="${ex.comments !== undefined && ex.comments !== null ? esc(ex.comments) : ''}" min="0"></div>
-    <div class="field"><label>保存</label><input name="saves" type="number" value="${ex.saves !== undefined && ex.saves !== null ? esc(ex.saves) : ''}" min="0"></div>
-    <div class="field"><label>シェア</label><input name="shares" type="number" value="${ex.shares !== undefined && ex.shares !== null ? esc(ex.shares) : ''}" min="0"></div>
-    <div class="field"><label>新規フォロワー</label><input name="follows" type="number" value="${ex.follows !== undefined && ex.follows !== null ? esc(ex.follows) : ''}"></div>
+    <div class="field wide"><div class="ins-metrics">
+        <div class="field"><label>リーチ数 *</label><input name="reach" type="number" min="0" required value="${ex.reach !== undefined && ex.reach !== null ? esc(ex.reach) : ''}"></div>
+        <div class="field"><label>いいね数</label><input name="likes" type="number" min="0" value="${ex.likes !== undefined && ex.likes !== null ? esc(ex.likes) : ''}"></div>
+        <div class="field"><label>コメント数</label><input name="comments" type="number" min="0" value="${ex.comments !== undefined && ex.comments !== null ? esc(ex.comments) : ''}"></div>
+        <div class="field"><label>リプライ数</label><input name="replies" type="number" min="0" value="${ex.replies !== undefined && ex.replies !== null ? esc(ex.replies) : ''}"></div>
+        <div class="field"><label>シェア数</label><input name="shares" type="number" min="0" value="${ex.shares !== undefined && ex.shares !== null ? esc(ex.shares) : ''}"></div>
+        <div class="field"><label>保存数</label><input name="saves" type="number" min="0" value="${ex.saves !== undefined && ex.saves !== null ? esc(ex.saves) : ''}"></div>
+      </div></div>
     <div class="field wide"><div class="callout" id="insCalc">画像を取り込むとER・保存率・シェア率を自動計算します。</div></div>
     <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
       ${existingPost ? '<button type="button" class="btn shu" id="insDel">この登録を削除</button>' : ''}
@@ -2503,7 +2507,7 @@ function openInsightImport(id) {
         const jj = await rs.json();
         const mm = jj && jj.metrics;
         if (mm) {
-          ['reach', 'likes', 'comments', 'saves', 'shares', 'follows'].forEach(k2 => {
+          ['reach', 'likes', 'comments', 'saves', 'shares', 'replies'].forEach(k2 => {
             if (mm[k2] !== undefined && mm[k2] !== null && mm[k2] !== '') form.elements[k2].value = Number(mm[k2]) || 0;
           });
           upd();
@@ -2533,13 +2537,13 @@ function openInsightImport(id) {
       const asg = insightAssign(items);
       ['reach', 'likes', 'comments', 'saves', 'shares'].forEach(k => { if (asg.o[k] !== '') form.elements[k].value = asg.o[k]; });
       upd();
-      const lbl = { '': '使わない', reach: 'リーチ', likes: 'いいね', comments: 'コメント', saves: '保存', shares: 'シェア', follows: '新規フォロワー' };
+      const lbl = { '': '使わない', reach: 'リーチ', likes: 'いいね', comments: 'コメント', saves: '保存', shares: 'シェア', replies: 'リプライ' };
       const el = document.getElementById('insStat');
       el.innerHTML = `<div class="callout"><b>${degraded ? '数値を検出（並び順の自動判定はできませんでした）' : '指標の並び（横1行）から'} ${items.length} 個${degraded ? '' : 'を検出'}</b>
         <div style="margin:7px 0 4px">${asg.slots.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
           <span style="color:var(--cha);min-width:78px">${i === 0 ? 'いちばん左' : (i === asg.slots.length - 1 && asg.slots.length > 2) ? 'いちばん右' : (i + 1) + '番目'}</span>
           <b class="num" style="min-width:64px;text-align:right">${esc(x.it.raw || String(x.it.v))}</b>
-          <select data-slot="${i}" style="width:auto;padding:4px 8px;font-size:12px">${['', 'reach', 'likes', 'comments', 'saves', 'shares', 'follows'].map(k => `<option value="${k}"${x.key === k ? ' selected' : ''}>${lbl[k]}</option>`).join('')}</select>
+          <select data-slot="${i}" style="width:auto;padding:4px 8px;font-size:12px">${['', 'reach', 'likes', 'comments', 'saves', 'shares', 'replies'].map(k => `<option value="${k}"${x.key === k ? ' selected' : ''}>${lbl[k]}</option>`).join('')}</select>
         </div>`).join('')}</div>
         <div style="font-size:11.5px">スクリーンショットの<b>指標が並んでいる行</b>を左から順に読み、左端＝リーチ／右端＝保存として割り当てています（自動判定できなかった場合は上から順に入れています）。<b>必ず画像と照合し、違っていれば右のメニューで付け替えてください</b>（画像そのものは保存されません）。</div></div>`;
       el.querySelectorAll('select[data-slot]').forEach(sel => {
@@ -2572,7 +2576,7 @@ function openInsightImport(id) {
     const data = {
       accountId: form.elements.accountId.value, date: form.elements.date.value, hour: 19,
       format: form.elements.format.value, reach: g('reach'), likes: g('likes'), comments: g('comments'),
-      saves: g('saves'), shares: g('shares'), follows: g('follows'),
+      saves: g('saves'), shares: g('shares'), replies: g('replies'),
       campaignId: c.id, tags: [], note: ''
     };
     if (existingPost) {
@@ -3258,7 +3262,7 @@ function renderInsights() {
     ['平均ER', pct(avg(p => metrics(p).er)), '（いいね＋コメント＋保存＋シェア）÷リーチ'],
     ['平均保存率', pct(avg(p => metrics(p).save)), 'レシピ・比較系で伸びる指標'],
     ['平均シェア率', pct(avg(p => metrics(p).share)), '2026年最重要の指標'],
-    ['新規フォロワー', nf(sum('follows')), `リーチ比 ${pct(avg(p => metrics(p).grow))}`]
+    ['リプライ', nf(sum('replies')), `リーチ比 ${pct(avg(p => metrics(p).grow))}`]
   ].map(([k, v, d]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join('');
 
   const chron = [...list].sort((a, b) => (parseD(a.date)?.getTime() || 0) - (parseD(b.date)?.getTime() || 0)).slice(-16);
@@ -3945,9 +3949,9 @@ document.getElementById('btnExportJson').onclick = () => {
   toast('JSONを書き出しました');
 };
 document.getElementById('btnExportCsv').onclick = () => {
-  const rows = DB.posts.map(p => [p.date, accName(p.accountId), p.format, p.reach, p.likes, p.comments, p.saves, p.shares, p.follows,
+  const rows = DB.posts.map(p => [p.date, accName(p.accountId), p.format, p.reach, p.likes, p.comments, p.saves, p.shares, p.replies,
     metrics(p).er.toFixed(2), metrics(p).save.toFixed(2), metrics(p).share.toFixed(2), (p.tags || []).join(' '), p.campaignId ? campById(p.campaignId)?.title : '']);
-  dl('posts-' + ymd(TODAY) + '.csv', toCsv(['日付','アカウント','形式','リーチ','いいえ','コメント','保存','シェア','新規フォロワー','ER%','保存率%','シェア率%','タグ','案件'], rows), 'text/csv');
+  dl('posts-' + ymd(TODAY) + '.csv', toCsv(['日付','アカウント','形式','リーチ','いいえ','コメント','保存','シェア','リプライ','ER%','保存率%','シェア率%','タグ','案件'], rows), 'text/csv');
   toast('CSVを書き出しました');
 };
 document.getElementById('btnExportCampCsv').onclick = () => {
@@ -4036,7 +4040,7 @@ function buildBrief() {
   recent.slice(0, 80).forEach(p => {
     const m = metrics(p);
     L.push('| ' + [dFull(p.date), cell(accName(p.accountId)), cell(p.format), (p.hour ?? '') + '時',
-      nf(p.reach), nf(p.likes), nf(p.comments), nf(p.saves), nf(p.shares), nf(p.follows),
+      nf(p.reach), nf(p.likes), nf(p.comments), nf(p.saves), nf(p.shares), nf(p.replies),
       m.er.toFixed(2) + '%', m.save.toFixed(2) + '%', m.share.toFixed(2) + '%',
       cell(p.campaignId ? (campById(p.campaignId)?.title || '') : ''), cell((p.tags || []).join(' '))].join(' | ') + ' |');
   });
