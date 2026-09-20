@@ -740,7 +740,7 @@ html{zoom:.7}
     </div>
     <div class="rail-spacer"></div>
     <nav class="rail-nav" id="nav">
-      <button class="nav-btn" data-view="accounts" data-m="アカウント" data-s="媒体"><span class="lb">アカウント</span></button>
+      <button class="nav-btn" data-view="accounts" data-m="アカウント管理" data-s="媒体"><span class="lb">アカウント管理</span></button>
       <button class="nav-btn" data-view="insights" data-s="分析"><span class="lb">投稿インサイト</span></button>
       <button class="nav-btn" data-view="trends" data-m="トレンド" data-s="情報"><span class="lb">トレンド・仕様変更</span></button>
       <button class="nav-btn" data-view="admin" data-m="管理情報" data-s="管理"><span class="lb">管理情報</span></button>
@@ -760,10 +760,10 @@ html{zoom:.7}
         <div class="sub" id="pageSub">—</div>
       </div>
       <div class="topbar-right">
-        <button class="btn sm" id="btnBrief">＋ <span class="bfull">分析に出す</span><span class="bshort">分析</span></button>
+        <button class="btn sm" data-hide-in="accounts" id="btnBrief">＋ <span class="bfull">分析に出す</span><span class="bshort">分析</span></button>
         <button class="btn sm" id="btnAddAccount">＋ <span class="bfull">アカウント</span><span class="bshort">媒体</span></button>
-        <button class="btn sm" id="btnAddPost">＋ <span class="bfull">投稿ログ</span><span class="bshort">投稿</span></button>
-        <button class="btn sm primary" id="btnAddCampaign">＋ <span class="bfull">案件を登録</span><span class="bshort">案件</span></button>
+        <button class="btn sm" data-hide-in="accounts" id="btnAddPost">＋ <span class="bfull">投稿ログ</span><span class="bshort">投稿</span></button>
+        <button class="btn sm primary" data-hide-in="accounts" id="btnAddCampaign">＋ <span class="bfull">案件を登録</span><span class="bshort">案件</span></button>
       </div>
     </header>
 
@@ -879,7 +879,7 @@ html{zoom:.7}
 
     <!-- ---------- 03 アカウント ---------- -->
     <section class="view" id="view-accounts" hidden>
-      <div class="sec-title"><h2>アカウント台帳</h2>
+      <div class="sec-title"><h2>アカウント一覧</h2>
         <span class="note">複数媒体をまとめて管理</span>
       </div>
       <div class="inline" style="margin-bottom:14px">
@@ -1438,7 +1438,7 @@ const VIEW_TITLES = {
   account:   ['アカウント詳細', 'このアカウントだけの数字をまとめて確認'],
   campaigns: ['案件管理', '受けた仕事を1件1レコードで管理'],
   schedule:  ['スケジュール', '訪問予定と投稿予定を1本の時系列で'],
-  accounts:  ['アカウント台帳', '複数アカウントの資産を俯瞰'],
+  accounts:  ['アカウント一覧', '複数アカウントの資産を俯瞰'],
   insights:  ['投稿インサイト', 'どの投稿が効いたかを数字で'],
   trends:    ['トレンド・仕様変更', '2026年のSNS仕様と企画ネタ'],
   admin:     ['管理情報', 'ログイン情報と振込口座']
@@ -1451,6 +1451,11 @@ function go(view) {
   const t = VIEW_TITLES[view] || ['', ''];
   document.getElementById('pageTitle').textContent = t[0];
   document.getElementById('pageSub').textContent = t[1];
+  /* 画面ごとに不要な右上ボタンを隠す */
+  document.querySelectorAll('[data-hide-in]').forEach(el => {
+    const hide = el.dataset.hideIn.split(',').indexOf(view) >= 0;
+    el.style.display = hide ? 'none' : '';
+  });
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
   try { history.replaceState(null, '', '#' + view); } catch (e) {}
   render();
