@@ -1182,6 +1182,8 @@ function parseD(s) { const d = new Date(s); return isNaN(d) ? null : d; }
 function ddiff(a, b) { return Math.floor((new Date(b) - new Date(a)) / 86400000); }
 function dLabel(s) { const d = parseD(s); return d ? `${d.getMonth()+1}/${d.getDate()}` : '—'; }
 function dFull(s) { const d = parseD(s); return d ? `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}` : '—'; }
+function jYMD(s) { const d = parseD(s); return d ? d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日' : '—'; }
+function jDT(s) { const d = parseD(s); return d ? jYMD(d) + '（' + DOW[d.getDay()] + '）' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—'; }
 const DOW = ['日','月','火','水','木','金','土'];
 window.addEventListener('error', function (e) {
   try {
@@ -1657,8 +1659,8 @@ function recDetail(c) {
   const m = campInsight(c);
   return `<tr class="rec-detail"><td colspan="10"><div class="rec-panel">
     <div class="rec-grid">
-      <div><span class="k">訪問日時</span><b>${esc(c.visitAt ? fmtDT(c.visitAt) : '未定')}</b></div>
-      <div><span class="k">投稿日</span><b>${esc(dFull(c.date))}</b></div>
+      <div><span class="k">訪問日時</span><b>${esc(c.visitAt ? jDT(c.visitAt) : '未定')}</b></div>
+      <div><span class="k">投稿日</span><b>${esc(jYMD(c.date))}</b></div>
       <div><span class="k">報酬額</span><b>${yen(c.reward)}</b></div>
       <div><span class="k">ステータス</span><b>${esc(c.status)}${c.dropped ? '（見送り）' : ''}</b></div>
       <div><span class="k">単価の目安</span><b>${yen(campFollowers(c) * 2)}〜${yen(campFollowers(c) * 4)}</b></div>
@@ -1671,7 +1673,7 @@ function recDetail(c) {
     ${m.posts.length ? `<div class="tw" style="margin-bottom:12px"><table>
       <thead><tr><th>投稿日</th><th>アカウント</th><th>形式</th><th class="num r">リーチ</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th></tr></thead>
       <tbody>${m.posts.map(p => { const x = metrics(p); return `<tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
-        <td class="num">${esc(dLabel(p.date))}</td><td style="font-size:11.5px">${esc(accName(p.accountId))}</td>
+        <td class="num">${esc(jYMD(p.date))}</td><td style="font-size:11.5px">${esc(accName(p.accountId))}</td>
         <td><span class="chip">${esc(p.format)}</span></td>
         <td class="num r">${nf(p.reach)}</td><td class="num r">${nf(p.saves)}</td><td class="num r">${nf(p.shares)}</td>
         <td class="num r" style="font-weight:700">${pct(x.er)}</td></tr>`; }).join('')}</tbody></table></div>` : ''}
@@ -1772,7 +1774,7 @@ function renderAlerts() {
     <thead><tr>
       <th style="width:92px">種別</th><th style="width:320px">内容</th><th>クライアント / 店舗名</th>
       <th style="width:180px">アカウント</th><th class="num r" style="width:96px">報酬額</th>
-      <th style="width:86px">投稿日</th><th style="width:112px">ステータス</th>
+      <th style="width:106px">投稿日</th><th style="width:112px">ステータス</th>
     </tr></thead>
     <tbody>${cam.map(a => { const c = a.camp; const tn = tone(a.kind); return `<tr data-open-camp="${esc(c.id)}" style="cursor:pointer">
       <td><span class="chip" style="background:${tn};border-color:${tn};color:#fff">${esc(a.kind)}</span>${a.sev === 'high' ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800;margin-top:3px">優先</div>' : ''}</td>
@@ -1780,7 +1782,7 @@ function renderAlerts() {
       <td>${campHead(c)}</td>
       <td style="font-size:11.5px">${esc(campAccNames(c))}</td>
       <td class="num r">${yen(c.reward)}</td>
-      <td class="num">${esc(dLabel(c.date))}</td>
+      <td class="num">${esc(jYMD(c.date))}</td>
       <td><span class="stamp ${STATUS_CLS[c.status] || ''}">${esc(c.status)}</span></td>
     </tr>`; }).join('')}</tbody></table>` : emptyBox('未投稿・未請求・未入金はいずれもありません。');
 }
@@ -1816,7 +1818,7 @@ function renderCampaigns() {
   document.getElementById('dashAlerts').innerHTML = (cam.length ? `<table>
     <thead><tr>
       <th style="width:280px">理由</th><th>クライアント / 店舗名</th><th style="width:190px">アカウント</th>
-      <th class="num r" style="width:96px">報酬額</th><th style="width:86px">投稿日</th><th style="width:116px">ステータス</th>
+      <th class="num r" style="width:96px">報酬額</th><th style="width:106px">投稿日</th><th style="width:116px">ステータス</th>
     </tr></thead>
     <tbody>${cam.map(a => { const c = a.camp; return `<tr data-open-camp="${esc(c.id)}" style="cursor:pointer">
       <td><div style="display:flex;gap:8px;align-items:flex-start">
@@ -1825,7 +1827,7 @@ function renderCampaigns() {
       <td>${campHead(c)}</td>
       <td style="font-size:11.5px">${esc(campAccNames(c))}</td>
       <td class="num r">${yen(c.reward)}</td>
-      <td class="num">${esc(dLabel(c.date))}</td>
+      <td class="num">${esc(jYMD(c.date))}</td>
       <td><span class="stamp ${STATUS_CLS[c.status] || ''}">${esc(c.status)}</span></td>
     </tr>`; }).join('')}</tbody></table>`
     : emptyBox('期日超過・未請求・未入金はありません。すべて整っています。'))
@@ -1845,11 +1847,11 @@ function renderCampaigns() {
   box.innerHTML = `<table class="rec-table">
     <thead><tr>
       <th style="width:30px"></th>
-      <th style="width:114px">訪問日時</th>
+      <th style="width:154px">訪問日時</th>
       <th>クライアント / 店舗名</th>
       <th style="width:170px">アカウント</th>
       <th class="num r" style="width:92px">報酬額</th>
-      <th style="width:84px">投稿日</th>
+      <th style="width:106px">投稿日</th>
       <th style="width:148px">インサイト情報</th>
       <th style="width:172px">ステータス</th>
       <th style="width:104px">請求書</th>
@@ -1865,11 +1867,11 @@ function renderCampaigns() {
       const flag = c.dropped ? 'var(--cha)' : late ? 'var(--shu)' : c.status === '入金済' ? 'var(--ok)' : c.status === '請求中' ? 'var(--kohaku)' : 'var(--mori-3)';
       return `<tr class="rec ${open ? 'open' : ''}" data-rec="${esc(c.id)}">
         <td><span class="rec-dot" style="background:${flag}" title="${c.dropped ? '見送り' : c.status}"></span></td>
-        <td class="num">${v ? esc(fmtDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}</td>
+        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}</td>
         <td>${campHead(c)}</td>
         <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0">${esc(a.name)}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
         <td class="num r">${yen(c.reward)}</td>
-        <td class="num">${esc(dLabel(c.date))}${late ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800">期日超過</div>' : ''}</td>
+        <td class="num">${esc(jYMD(c.date))}${late ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800">期日超過</div>' : ''}</td>
         <td>${ins.posts.length
           ? `<button class="ins-btn" data-ins-camp="${esc(c.id)}"><b>リーチ ${wan(ins.reach)}</b><span>ER ${ins.er.toFixed(2)}% ／ ${ins.posts.length}本</span></button>`
           : `<button class="ins-btn empty" data-ins-camp="${esc(c.id)}">＋ 画像を取り込む</button>`}</td>
@@ -1998,7 +2000,7 @@ function invoiceBody(c) {
     <table>
       <thead><tr><th>品名</th><th class="r" style="width:64px">数量</th><th class="r" style="width:120px">単価</th><th class="r" style="width:120px">金額</th></tr></thead>
       <tbody>
-        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(dFull(c.date)) : ''}${campAccNames(c) ? ' / ' + esc(campAccNames(c)) : ''}</div></td>
+        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${campAccNames(c) ? ' / ' + esc(campAccNames(c)) : ''}</div></td>
           <td class="r">1</td><td class="r">${yen(sub)}</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">小計</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">消費税（${rate}%）</td><td class="r">${yen(tax)}</td></tr>
@@ -2427,7 +2429,7 @@ function openInsightImport(id) {
   if (!pool.length) { toast('先にアカウントを登録してください'); return; }
   openModal('インサイト画像を取り込む', `<form id="insForm" class="fgrid">
     <div class="field wide"><div class="callout">投稿のスクリーンショットから数値を読み取って自動入力します。<b>指標が並んでいる行を左から順に</b>割り当てます（読み取り後に検出一覧で付け替えできます）。<b>結果は必ず画像と照合してください。</b>「12.3万」のような省略表記や小さい数字は読み取れないことがあります。画像そのものは保存されません。</div></div>
-    ${existingPost ? `<div class="field wide"><div class="callout"><b>この案件の登録済みインサイトを表示しています</b>（登録 ${exists.length}件・投稿日 ${esc(ex.date || '—')} ／ ${esc(accName(ex.accountId))}）。保存すると<b>上書き更新</b>され、重複登録されません。</div></div>` : ''}
+    ${existingPost ? `<div class="field wide"><div class="callout"><b>この案件の登録済みインサイトを表示しています</b>（登録 ${exists.length}件・投稿日 ${esc(ex.date ? jYMD(ex.date) : '—')} ／ ${esc(accName(ex.accountId))}）。保存すると<b>上書き更新</b>され、重複登録されません。</div></div>` : ''}
     <div class="field"><label>対象アカウント</label><select name="accountId">${pool.map(a => `<option value="${esc(a.id)}"${ex.accountId === a.id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
     <div class="field"><label>投稿日</label><input name="date" type="date" value="${esc(ex.date || ymd(TODAY))}"></div>
     <div class="field"><label>形式</label><select name="format">${FORMATS.map(f => `<option ${(ex.format || 'リール') === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
@@ -3218,7 +3220,7 @@ function renderAccountDetail() {
     <thead><tr><th>日付</th><th>形式</th><th class="num r">リーチ</th><th class="num r">いいね</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th><th>案件</th></tr></thead>
     <tbody>${desc.map(p => { const m = metrics(p); return `
       <tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
-        <td class="num">${esc(dLabel(p.date))}</td>
+        <td class="num">${esc(jYMD(p.date))}</td>
         <td><span class="chip">${esc(p.format)}</span></td>
         <td class="num r">${nf(p.reach)}</td><td class="num r">${nf(p.likes)}</td><td class="num r">${nf(p.saves)}</td><td class="num r">${nf(p.shares)}</td>
         <td class="num r" style="font-weight:700">${pct(m.er)}</td>
@@ -3283,7 +3285,7 @@ function renderInsights() {
     <thead><tr><th>日付</th><th>アカウント</th><th>形式</th><th class="num r">リーチ</th><th class="num r">いいね</th><th class="num r">保存</th><th class="num r">シェア</th>
     <th class="num r">ER</th><th class="num r">保存率</th><th>タグ</th></tr></thead>
     <tbody>${list.map(p => { const m = metrics(p); return `<tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
-      <td class="num">${esc(dLabel(p.date))}</td><td>${esc(accName(p.accountId))}</td>
+      <td class="num">${esc(jYMD(p.date))}</td><td>${esc(accName(p.accountId))}</td>
       <td><span class="chip">${esc(p.format)}</span></td>
       <td class="num r">${nf(p.reach)}</td><td class="num r">${nf(p.likes)}</td><td class="num r">${nf(p.saves)}</td><td class="num r">${nf(p.shares)}</td>
       <td class="num r" style="font-weight:700">${pct(m.er)}</td><td class="num r">${pct(m.save)}</td>
@@ -4003,7 +4005,7 @@ function buildBrief() {
   const totF = DB.accounts.reduce((s, a) => s + (Number(a.followers) || 0), 0);
   L.push('# AMOTI 分析依頼');
   L.push('');
-  L.push('日付：' + dFull(ymd(TODAY)) + ' ／ アカウント ' + DB.accounts.length + '件 ・ 案件 ' + DB.campaigns.length + '件 ・ 投稿ログ ' + DB.posts.length + '本 ・ 総フォロワー ' + nf(totF));
+  L.push('日付：' + jYMD(ymd(TODAY)) + ' ／ アカウント ' + DB.accounts.length + '件 ・ 案件 ' + DB.campaigns.length + '件 ・ 投稿ログ ' + DB.posts.length + '本 ・ 総フォロワー ' + nf(totF));
   L.push('');
 
   L.push('## 1. アカウント');
@@ -4029,7 +4031,7 @@ function buildBrief() {
   L.push('| 投稿日 | クライアント | アカウント | 種別 | 報酬 | 円/フォロワー | ステータス |');
   L.push('|---|---|---|---|---:|---:|---|');
   DB.campaigns.forEach(c => {
-    L.push('| ' + [dFull(c.date), cell(c.client), cell(campAccNames(c)), cell(c.type), nf(c.reward),
+    L.push('| ' + [jYMD(c.date), cell(c.client), cell(campAccNames(c)), cell(c.type), nf(c.reward),
       cUnit(c).toFixed(2), cell(c.status)].join(' | ') + ' |');
   });
   L.push('');
@@ -4041,7 +4043,7 @@ function buildBrief() {
   L.push('|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|');
   recent.slice(0, 80).forEach(p => {
     const m = metrics(p);
-    L.push('| ' + [dFull(p.date), cell(accName(p.accountId)), cell(p.format), (p.hour ?? '') + '時',
+    L.push('| ' + [jYMD(p.date), cell(accName(p.accountId)), cell(p.format), (p.hour ?? '') + '時',
       nf(p.reach), nf(p.likes), nf(p.comments), nf(p.saves), nf(p.shares), nf(p.replies),
       m.er.toFixed(2) + '%', m.save.toFixed(2) + '%', m.share.toFixed(2) + '%',
       cell(p.campaignId ? (campById(p.campaignId)?.title || '') : ''), cell((p.tags || []).join(' '))].join(' | ') + ' |');
