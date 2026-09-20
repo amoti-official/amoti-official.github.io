@@ -1181,6 +1181,13 @@ function ddiff(a, b) { return Math.floor((new Date(b) - new Date(a)) / 86400000)
 function dLabel(s) { const d = parseD(s); return d ? `${d.getMonth()+1}/${d.getDate()}` : '—'; }
 function dFull(s) { const d = parseD(s); return d ? `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}` : '—'; }
 const DOW = ['日','月','火','水','木','金','土'];
+window.addEventListener('error', function (e) {
+  try {
+    var d = document.getElementById('jsErrBar');
+    if (!d) { d = document.createElement('div'); d.id = 'jsErrBar'; d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#7a1f2b;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap'; document.body.appendChild(d); }
+    d.textContent = 'JSエラー: ' + (e.message || (e.error && e.error.message) || '') + '  @' + (e.lineno || '?') + ':' + (e.colno || '?') + '（この行をコピーしてご連絡ください）';
+  } catch (x) {}
+});
 
 /* ---------- 定数 ---------- */
 const PLATFORMS = ['Instagram','TikTok','YouTube','X','Threads'];
@@ -1837,6 +1844,7 @@ function renderCampaigns() {
       <th style="width:34px"></th>
     </tr></thead>
     <tbody>${list.map(c => {
+      try {
       const open = expandedCamps.has(c.id);
       const d = parseD(c.date), v = parseD(c.visitAt);
       const late = d && d < TODAY && c.status === '進行中' && !c.dropped;
@@ -1862,6 +1870,7 @@ function renderCampaigns() {
           : `<button class="btn sm" data-inv="${esc(c.id)}">発行</button>`}</td>
         <td class="r"><span class="rec-caret">▶</span></td>
       </tr>` + (open ? recDetail(c) : '');
+      } catch (e) { return `<tr class="rec"><td colspan="9" style="color:var(--shu);font-size:12px;padding:10px">この案件の表示でエラーが発生しました：${esc(String((e && e.message) || e))}（データは消えていません。この行をコピーしてご連絡ください）</td></tr>`; }
     }).join('')}</tbody></table>`;
 }
 function campForm(c, presetAcc) {
