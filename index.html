@@ -2506,12 +2506,14 @@ function renderApiForm() {
       <summary style="cursor:pointer;font-weight:700;font-size:12.5px">Metaアクセストークンの取得手順（クリックで開く）</summary>
       <ol style="font-size:12.5px;line-height:1.9;padding-left:20px;margin-top:8px">
         <li>Instagramを<b>プロアカウント</b>（ビジネス／クリエイター）に切り替え、Facebookページと連携します</li>
-        <li>Meta for Developers で<b>アプリを作成</b>（タイプ：ビジネス）</li>
-        <li>アプリに Instagram 関連のプロダクトを追加し、権限 <code>instagram_basic</code> / <code>pages_show_list</code> / <code>pages_read_engagement</code> を付与</li>
-        <li>Graph API Explorer でそのアプリと権限を選び、<b>Generate Access Token</b></li>
-        <li>アクセストークンデバッガで <b>Extend Access Token</b>（約60日有効の長期トークンに延長）</li>
-        <li>上の欄に貼り付け → <b>アカウントIDを自動取得</b> → <b>保存する</b></li>
+        <li><a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">マイアプリ</a> で<b>すでに持っているアプリを使えます</b>（新規作成でも可・タイプ：ビジネス）。「開発中」モードのままでOK：アプリの<b>管理者・開発者であればトークンを発行できます</b></li>
+        <li>そのアプリの「ユースケース／プロダクト」で <b>Instagram</b>（＋Facebookログイン）を追加</li>
+        <li>権限を追加：<code>instagram_basic</code> / <code>pages_show_list</code> / <code>pages_read_engagement</code>（必要に応じて <code>business_management</code>）</li>
+        <li><a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a> でそのアプリを選び、上記の権限にチェック → <b>Generate Access Token</b>（Instagramのプロアカウントでログインして許可）</li>
+        <li><a href="https://developers.facebook.com/tools/debug/accesstoken/" target="_blank" rel="noopener">アクセストークンデバッガ</a> で <b>Extend Access Token</b>（約60日有効の長期トークンに延長）</li>
+        <li>上の欄に貼り付け → <b>接続テスト</b> → <b>アカウントIDを自動取得</b> → <b>保存する</b></li>
       </ol>
+      <div class="callout warn" style="margin-top:8px">トークンは<b>パスワードと同じ秘密情報</b>です。チャットやメールで人に送らず、このアプリの入力欄にだけ保存してください（このアプリは端末のブラウザ内にのみ保存します）。</div>
       <div class="callout" style="margin-top:8px">取得できるのは<b>プロアカウント（ビジネス／クリエイター）</b>の公開情報のみです。一般アカウントは対象外なので、スクリーンショットから取り込んでください。トークンが切れたら同じ手順で再発行してください。</div>
     </details>`;
   const msg = h => { const m = document.getElementById('apiMsg'); if (m) m.innerHTML = h; };
