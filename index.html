@@ -1814,7 +1814,12 @@ function renderCampaigns() {
 }
 function renderCampaigns() {
   const list = filteredCamps();
-  document.getElementById('campBrief').textContent = `${list.length}件を表示（全アカウント横断）`;
+  const allCount = DB.campaigns.length;
+  const hiddenList = DB.campaigns.filter(c => list.indexOf(c) < 0);
+  const droppedN = DB.campaigns.filter(c => c.dropped).length;
+  const briefEl = document.getElementById('campBrief');
+  briefEl.textContent = `${list.length}件を表示（全 ${allCount}件・見送り ${droppedN}件）`
+    + (hiddenList.length ? '／ 非表示: ' + hiddenList.slice(0, 3).map(c => campTitle(c)).join('、') + (hiddenList.length > 3 ? ` ほか${hiddenList.length - 3}件` : '') + ' → 上の「見送り案件」や絞り込みを解除すると表示されます' : '');
 
   const box = document.getElementById('campRecords');
   if (!list.length) { box.innerHTML = emptyBox('条件に合う案件がありません。右上の「＋ 案件を登録」から追加できます。'); return; }
