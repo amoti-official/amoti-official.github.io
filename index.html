@@ -1623,16 +1623,16 @@ function filteredCamps() {
   if (f.sort === 'unit-desc') out.sort((a, b) => cUnit(b) - cUnit(a));
   return out;
 }
-function campPosts(c) { return DB.posts.filter(p => p.campaignId === c.id); }
-function campInsight(c) {
-  const m = campPosts(c);
-  return {
-    posts: m,
-    reach: m.reduce((s, p) => s + (Number(p.reach) || 0), 0),
-    saves: m.reduce((s, p) => s + (Number(p.saves) || 0), 0),
-    shares: m.reduce((s, p) => s + (Number(p.shares) || 0), 0),
-    er: m.length ? m.reduce((s, p) => s + metrics(p).er, 0) / m.length : 0
-  };
+function campPosts(c) {
+  const ids = campAccIds(c);
+  const base = parseD(c.date);
+  return DB.posts.filter(p => {
+    if (p.campaignId === c.id) return true;                  /* 案件に紐づく投稿は必ず表示 */
+    if (p.campaignId || !ids.length) return false;
+    if (ids.indexOf(p.accountId) < 0) return false;          /* 旧データ（案件IDなし）はアカウントで判定 */
+    const d = parseD(p.date);
+    return !base || !d || Math.abs(d - base) <= 12096e5;     /* 案件日の前後14日以内 */
+  });
 }
 function recDetail(c) {
   const m = campInsight(c);
@@ -2395,13 +2395,17 @@ function openInsightImport(id) {
   const c = campById(id); if (!c) return;
   const accs = campAccs(c);
   const pool = accs.length ? accs : DB.accounts;
+  const exists = DB.posts.filter(pp => pp.campaignId === c.id).sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
+  const existingPost = exists[0] || null;
+  const ex = existingPost || {};
   if (!pool.length) { toast('先にアカウントを登録してください'); return; }
   openModal('インサイト画像を取り込む', `<form id="insForm" class="fgrid">
     <div class="field wide"><div class="callout">投稿のスクリーンショットから数値を読み取って自動入力します。<b>指標が並んでいる行を左から順に</b>割り当てます（読み取り後に検出一覧で付け替えできます）。<b>結果は必ず画像と照合してください。</b>「12.3万」のような省略表記や小さい数字は読み取れないことがあります。画像そのものは保存されません。</div></div>
-    <div class="field"><label>対象アカウント</label><select name="accountId">${pool.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></div>
-    <div class="field"><label>投稿日</label><input name="date" type="date" value="${esc(ymd(TODAY))}"></div>
-    <div class="field"><label>形式</label><select name="format">${FORMATS.map(f => `<option ${f === 'リール' ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
-    <div class="field"><label>案件</label><input value="${esc(c.title)}" readonly></div>
+    ${existingPost ? `<div class="field wide"><div class="callout"><b>この案件の登録済みインサイトを表示しています</b>（登録 ${exists.length}件・投稿日 ${esc(ex.date || '—')} ／ ${esc(accName(ex.accountId))}）。保存すると<b>上書き更新</b>され、重複登録されません。</div></div>` : ''}
+    <div class="field"><label>対象アカウント</label><select name="accountId">${pool.map(a => `<option value="${esc(a.id)}"${ex.accountId === a.id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
+    <div class="field"><label>投稿日</label><input name="date" type="date" value="${esc(ex.date || ymd(TODAY))}"></div>
+    <div class="field"><label>形式</label><select name="format">${FORMATS.map(f => `<option ${(ex.format || 'リール') === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
+    <div class="field"><label>案件</label><input value="${esc(campTitle(c))}" readonly></div>
     <div class="field wide"><label>インサイト画像</label>
       <div class="ins-drop" id="insDrop">クリックして画像を選択 ／ ここにドロップ ／ Ctrl+V で貼り付け</div>
       <input type="file" id="insFile" accept="image/*" style="display:none"></div>
@@ -2410,16 +2414,16 @@ function openInsightImport(id) {
       <div style="font-size:10.5px;color:var(--cha);margin-top:4px">設定すると <b>Genspark AI（ビジョン）</b>が画像を読み取ります。URLはこの端末にのみ保存し、APIキーはWorker側に置きます。</div></div>
     <div class="field wide" id="insPrev"></div>
     <div class="field wide" id="insStat"></div>
-    <div class="field"><label>リーチ *</label><input name="reach" type="number" min="0" required></div>
-    <div class="field"><label>いいね</label><input name="likes" type="number" min="0"></div>
-    <div class="field"><label>コメント</label><input name="comments" type="number" min="0"></div>
-    <div class="field"><label>保存</label><input name="saves" type="number" min="0"></div>
-    <div class="field"><label>シェア</label><input name="shares" type="number" min="0"></div>
-    <div class="field"><label>新規フォロワー</label><input name="follows" type="number"></div>
+    <div class="field"><label>リーチ *</label><input name="reach" type="number" value="${ex.reach !== undefined && ex.reach !== null ? esc(ex.reach) : ''}" min="0" required></div>
+    <div class="field"><label>いいね</label><input name="likes" type="number" value="${ex.likes !== undefined && ex.likes !== null ? esc(ex.likes) : ''}" min="0"></div>
+    <div class="field"><label>コメント</label><input name="comments" type="number" value="${ex.comments !== undefined && ex.comments !== null ? esc(ex.comments) : ''}" min="0"></div>
+    <div class="field"><label>保存</label><input name="saves" type="number" value="${ex.saves !== undefined && ex.saves !== null ? esc(ex.saves) : ''}" min="0"></div>
+    <div class="field"><label>シェア</label><input name="shares" type="number" value="${ex.shares !== undefined && ex.shares !== null ? esc(ex.shares) : ''}" min="0"></div>
+    <div class="field"><label>新規フォロワー</label><input name="follows" type="number" value="${ex.follows !== undefined && ex.follows !== null ? esc(ex.follows) : ''}"></div>
     <div class="field wide"><div class="callout" id="insCalc">画像を取り込むとER・保存率・シェア率を自動計算します。</div></div>
     <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
       <button type="button" class="btn ghost" id="insCancel">キャンセル</button>
-      <button type="submit" class="btn primary">この数値で登録</button>
+      <button type="submit" class="btn primary">${existingPost ? 'この数値で更新' : 'この数値で登録'}</button>
     </div></form>`);
   const form = document.getElementById('insForm');
   const pxEl = document.getElementById('insProxy');
@@ -2540,9 +2544,14 @@ function openInsightImport(id) {
       saves: g('saves'), shares: g('shares'), follows: g('follows'),
       campaignId: c.id, tags: [], note: ''
     };
-    DB.posts.push(Object.assign({ id: uid('p') }, data));
-    expandedCamps.add(c.id);
-    save(); cleanup(); closeModal(); render(); toast('インサイトを登録しました');
+    if (existingPost) {
+      Object.assign(existingPost, data);
+      save(); cleanup(); closeModal(); render(); toast('インサイトを更新しました');
+    } else {
+      DB.posts.push(Object.assign({ id: uid('p') }, data));
+      expandedCamps.add(c.id);
+      save(); cleanup(); closeModal(); render(); toast('インサイトを登録しました');
+    }
   };
 }
 /* =========================================================================
