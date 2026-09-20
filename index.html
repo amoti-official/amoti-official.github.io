@@ -1318,7 +1318,7 @@ function save() {
       _storeWarned = true;
       toast('この表示環境ではデータを保存できません（プレビュー枠の中など）。ファイルを直接開くか、公開URLでお使いください');
     }
-  }
+  }  try { syncPushSoon(); } catch (e) {}
 }
 function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
 
@@ -4170,6 +4170,7 @@ refreshFilterSelects();
   const anchor = document.getElementById('btnWipe');
   if (!anchor) return;
   try { ensureFollowSyncCard(); } catch (e) {}
+  try { ensureSyncCard(); } catch (e) {}
   const host = anchor.closest('.card');
   if (!host) return;
   let raw = null; try { raw = localStorage.getItem(KEY); } catch (e) {}
@@ -4274,6 +4275,105 @@ function ensureFollowSyncCard() {
   document.getElementById('fuNow').onclick = () => { saveUrl(); syncFollowers(true); };
 }
 setTimeout(() => { try { if (String(((DB.api || {}).followUrl) || '').trim() && ((DB.api || {}).lastFollowSync || '') !== ymd(TODAY)) syncFollowers(false); } catch (e) {} }, 1800);
+/* ---------- 端末間の自動同期（Cloudflare Worker + KV 方式） ---------- */
+let _applyingRemote = false, _pushT = null, _lastPush = '';
+function syncCfg() { DB.api = DB.api || {}; return DB.api; }
+function syncReady() { const c = DB.api || {}; return !!(String(c.syncUrl || '').trim() && String(c.syncKey || '').trim()); }
+function syncSay(h) { const el = document.getElementById('syMsg'); if (el) el.innerHTML = h; }
+function syncInfo() {
+  const c = DB.api || {};
+  syncSay('<div class="callout' + (syncReady() ? '' : ' warn') + '"><b>状態：</b>' + (syncReady()
+    ? '設定済み' + (c.lastSyncAt ? '（最終同期 ' + esc(jDT(c.lastSyncAt)) + '）' : '（未同期）')
+    : '未設定。同期URLとコードを入れて有効にしてください') + '</div>');
+}
+async function syncPush(manual) {
+  const c = DB.api || {};
+  const u = String(c.syncUrl || '').trim(), k = String(c.syncKey || '').trim();
+  if (!u || !k) { if (manual) toast('同期URLと同期コードを入力してください'); return; }
+  const body = JSON.stringify(DB);
+  if (body === _lastPush && !manual) return;
+  try {
+    const r = await fetch(u + (u.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(k), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _lastPush = body;
+    DB.api.lastSyncAt = new Date().toISOString();
+    try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+    syncInfo();
+    if (manual) { toast('サーバーへ送信しました'); syncSay('<div class="callout"><b>送信しました。</b>この同期コードをスマホ側に入力すると同じデータが表示されます。</div>'); }
+  } catch (e) {
+    if (manual) syncSay('<div class="callout warn">送信できませんでした：' + esc(String((e && e.message) || e)) + '（WorkerのURL・CORS設定をご確認ください）</div>');
+  }
+}
+function syncPushSoon() {
+  if (_applyingRemote || !syncReady() || window.__PV) return;
+  if (_pushT) clearTimeout(_pushT);
+  _pushT = setTimeout(() => { syncPush(false); }, 2200);
+}
+async function syncPull(manual) {
+  const c = DB.api || {};
+  const u = String(c.syncUrl || '').trim(), k = String(c.syncKey || '').trim();
+  if (!u || !k) { if (manual) toast('同期URLと同期コードを入力してください'); return; }
+  try {
+    if (manual) syncSay('<div class="callout">読み込んでいます…</div>');
+    const r = await fetch(u + (u.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(k) + '&t=' + Date.now(), { cache: 'no-store' });
+    if (r.status === 404) { syncSay('<div class="callout warn">サーバーにまだデータがありません。「この端末のデータを送る」を押してください。</div>'); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const rdb = j && j.db;
+    if (!rdb || !Array.isArray(rdb.accounts)) throw new Error('データ形式が違います');
+    const remoteAt = String(j.updatedAt || ''), localAt = String(DB.savedAt || '');
+    if (remoteAt && localAt && remoteAt <= localAt) {
+      syncSay('<div class="callout">サーバー側はこの端末と同じか古いため、読み込みは行いませんでした（この端末の方が新しい）。</div>');
+      return;
+    }
+    _applyingRemote = true;
+    rdb.checks = rdb.checks || {};
+    rdb.api = Object.assign({}, rdb.api, { syncUrl: u, syncKey: k });
+    rdb.savedAt = remoteAt || new Date().toISOString();
+    DB = normalize(rdb);
+    save(); _applyingRemote = false;
+    refreshFilterSelects(); render();
+    toast('別端末のデータを読み込みました');
+    syncInfo();
+    syncSay('<div class="callout"><b>取り込みました。</b>アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>');
+  } catch (e) {
+    syncSay('<div class="callout warn">読み込めませんでした：' + esc(String((e && e.message) || e)) + '（WorkerのURL・CORS設定をご確認ください）</div>');
+  }
+}
+function ensureSyncCard() {
+  const anchor = document.getElementById('btnWipe');
+  if (!anchor) return;
+  const host = anchor.closest('.card'); if (!host) return;
+  if (document.getElementById('syncCard')) { syncInfo(); return; }
+  const c = DB.api || {};
+  const card = document.createElement('div'); card.className = 'card'; card.id = 'syncCard'; card.style.marginTop = '18px';
+  card.innerHTML = '<div class="card-h"><h2>端末間の自動同期（PC ↔ スマホ）</h2><span class="hint">Cloudflare Worker + KV</span></div>' +
+    '<div class="card-b">' +
+    '<div class="field"><label>同期サーバーのURL</label><input id="syUrl" placeholder="https://amoti-sync.xxxx.workers.dev" value="' + esc(c.syncUrl || '') + '"></div>' +
+    '<div class="field" style="margin-top:10px"><label>同期コード（合言葉・8文字以上）</label><div class="inline">' +
+    '<input id="syKey" placeholder="例：amoti-8f3k2p9z" style="flex:1 1 200px" value="' + esc(c.syncKey || '') + '">' +
+    '<button type="button" class="btn ghost" id="syGen">ランダム作成</button>' +
+    '<button type="button" class="btn" id="syCopy">コードをコピー</button></div></div>' +
+    '<div class="inline" style="margin-top:12px">' +
+    '<button type="button" class="btn primary" id="syPull">サーバーのデータを読み込む</button>' +
+    '<button type="button" class="btn" id="syPush">この端末のデータを送る</button></div>' +
+    '<div id="syMsg" style="margin-top:12px;font-size:12px"></div>' +
+    '<div class="callout warn" style="margin-top:12px"><b>同じ同期コード</b>をPCとスマホの両方に入れると、同じデータが表示されます。編集は自動で送信され（約2秒後）、アプリを開いたときに新しい方を自動で読み込みます。データはご自身のCloudflare KVにのみ保存されます。</div>' +
+    '</div>';
+  host.parentNode.insertBefore(card, host);
+  const su = document.getElementById('syUrl'), sk = document.getElementById('syKey');
+  const keep = () => { const cc = syncCfg(); cc.syncUrl = su.value.trim(); cc.syncKey = sk.value.trim(); save(); syncInfo(); };
+  su.onchange = keep; sk.onchange = keep;
+  document.getElementById('syGen').onclick = () => { sk.value = 'amoti-' + Math.random().toString(36).slice(2, 10); keep(); };
+  document.getElementById('syCopy').onclick = () => copyText(sk.value || (document.getElementById('syKey').value), '同期コードをコピーしました');
+  document.getElementById('syPull').onclick = () => { keep(); syncPull(true); };
+  document.getElementById('syPush').onclick = () => { keep(); syncPush(true); };
+  syncInfo();
+}
+setTimeout(() => { try { if (syncReady() && (DB.api.lastSyncAt || '') < ymd(TODAY)) syncPull(false); } catch (e) {} }, 1300);
+
 
 
 go(VIEW_TITLES[h] ? h : 'dash');
