@@ -1157,6 +1157,7 @@ html{zoom:.7}
    AMOTI — コアロジック
    ========================================================================= */
 const KEY = 'gourmet_os_v1';
+let storeRaw = null, storeIssue = '';  /* 保存データの読み込み状態（診断用） */
 /* プレビュー用：描画前の純粋なHTMLを控えておく（このスクリプトはbody末尾なのでDOMは完成済み） */
 const SRC_HTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 const PV = window.__PV || null;
@@ -1278,7 +1279,6 @@ if (!DB.dataRev || DB.dataRev < 2) {
   save();
   if (had) setTimeout(() => { try { toast('保存済みのデータ ' + had + '件を引き継ぎました'); } catch (e) {} }, 1200);
 }
-let storeRaw = null, storeIssue = '';
 function load() {
   try {
     if (window.__PV && window.__PV.db) { storeIssue = 'preview'; return normalize(window.__PV.db); }
