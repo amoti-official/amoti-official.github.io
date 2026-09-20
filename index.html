@@ -1668,7 +1668,7 @@ function recDetail(c) {
     ${c.note ? `<div class="rec-note">${esc(c.note)}</div>` : ''}
     ${m.posts.length ? `<div class="tw" style="margin-bottom:12px"><table>
       <thead><tr><th>投稿日</th><th>アカウント</th><th>形式</th><th class="num r">リーチ</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th></tr></thead>
-      <tbody>${m.map(p => { const x = metrics(p); return `<tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
+      <tbody>${m.posts.map(p => { const x = metrics(p); return `<tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
         <td class="num">${esc(dLabel(p.date))}</td><td style="font-size:11.5px">${esc(accName(p.accountId))}</td>
         <td><span class="chip">${esc(p.format)}</span></td>
         <td class="num r">${nf(p.reach)}</td><td class="num r">${nf(p.saves)}</td><td class="num r">${nf(p.shares)}</td>
@@ -2446,6 +2446,7 @@ function openInsightImport(id) {
     <div class="field"><label>新規フォロワー</label><input name="follows" type="number" value="${ex.follows !== undefined && ex.follows !== null ? esc(ex.follows) : ''}"></div>
     <div class="field wide"><div class="callout" id="insCalc">画像を取り込むとER・保存率・シェア率を自動計算します。</div></div>
     <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
+      ${existingPost ? '<button type="button" class="btn shu" id="insDel">この登録を削除</button>' : ''}
       <button type="button" class="btn ghost" id="insCancel">キャンセル</button>
       <button type="submit" class="btn primary">${existingPost ? 'この数値で更新' : 'この数値で登録'}</button>
     </div></form>`);
@@ -2480,6 +2481,12 @@ function openInsightImport(id) {
   document.getElementById('modalClose').onclick = cleanup;
   const mcEl = document.getElementById('modalClose');
   document.getElementById('insCancel').onclick = () => { cleanup(); closeModal(); };
+  const insDelBtn = document.getElementById('insDel');
+  if (insDelBtn) insDelBtn.onclick = () => {
+    if (!confirm('この案件のインサイト登録を削除しますか？（案件そのものは残ります）')) return;
+    DB.posts = DB.posts.filter(x => x.id !== existingPost.id);
+    save(); cleanup(); closeModal(); render(); toast('インサイトを削除しました');
+  };
   document.body.dataset.insOpen = '1';
   document.addEventListener('paste', onPaste);
 
