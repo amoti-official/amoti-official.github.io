@@ -2133,10 +2133,11 @@ function ocrInsightItems(data) {
     cands.push({ v: Math.round(v), raw, h, y: w.bbox.y0, cx: (w.bbox.x0 + w.bbox.x1) / 2 });
   });
   if (!cands.length) return [];
-  const maxH = Math.max.apply(null, cands.map(c => c.h));
-  const pos = cands.filter(c => c.v > 0 && c.h >= maxH * 0.6);
+  const pos = cands.filter(c => c.v > 0);
   if (!pos.length) return [];
-  const tol = Math.max(8, maxH * 0.7);
+  const hsort = pos.map(c => c.h).sort((a, b) => b - a);
+  const maxH = hsort[0];
+  const tol = Math.max(8, (hsort[Math.min(hsort.length - 1, 2)] || maxH) * 0.75);
   const lines = [];
   pos.slice().sort((a, b) => a.y - b.y).forEach(c => {
     let L = null;
@@ -2145,12 +2146,18 @@ function ocrInsightItems(data) {
     L.items.push(c); L.y = L.y * 0.6 + c.y * 0.4;
   });
   const wide = l => l.items.length > 1 ? l.items[l.items.length - 1].cx - l.items[0].cx : 0;
-  const rows = lines.filter(l => l.items.length >= 2 && wide(l) > maxH * 1.5);
-  const pick = rows.length ? rows : lines.filter(l => l.items.length >= 2);
-  if (!pick.length) return [];
-  pick.sort((a, b) => (b.items.length - a.items.length) || (wide(b) - wide(a)));
-  const best = pick[0];
-  const band = maxH * 0.85;
+  /* リーチ(=再生数)は画面中で最も大きい数値。それを含む行を指標行とみなす（時刻やバッテリー等の誤検出行を除外） */
+  const maxItem = pos.slice().sort((a, b) => b.v - a.v)[0];
+  let best = null;
+  lines.forEach(l => { if (l.items.indexOf(maxItem) >= 0) best = l; });
+  if (!best) {
+    const rows = lines.filter(l => l.items.length >= 2 && wide(l) > tol * 1.2);
+    const pick = rows.length ? rows : lines.filter(l => l.items.length >= 2);
+    if (!pick.length) return [];
+    pick.sort((a, b) => (wide(b) - wide(a)) || (b.items.length - a.items.length));
+    best = pick[0];
+  }
+  const band = Math.max(tol, maxH * 0.85);
   const inRow = cands.filter(c => best.items.some(i => Math.abs(c.y - i.y) < band));
   const uniq = [];
   inRow.sort((a, b) => a.cx - b.cx).forEach(c => {
@@ -2447,8 +2454,13 @@ function openInsightImport(id) {
     document.getElementById('insPrev').innerHTML = `<label>取り込んだ画像</label><img class="ins-shot" src="${url}" alt="取り込んだインサイト画像">`;
     stat('<span style="color:var(--cha)">読み取りを準備しています…</span>');
     try {
-      const data = await ocrRun(file, stat, { scale: 2, params: { tessedit_pageseg_mode: '11' } });
-      const items = ocrInsightItems(data);
+      const data = await ocrRun(file, stat, { scale: 2 });
+      let items = ocrInsightItems(data);
+      let degraded = false;
+      if (items.length < 2) {
+        const nums = ocrNumbers(data);
+        if (nums.length) { items = nums.map(v => ({ v: v, raw: nf(v), h: 0, y: 0, cx: 0 })); degraded = true; }
+      }
       if (!items.length) {
         stat('<div class="callout warn">数値を読み取れませんでした。<b>画像を見ながら手入力してください。</b></div>');
         return;
@@ -2458,13 +2470,13 @@ function openInsightImport(id) {
       upd();
       const lbl = { '': '使わない', reach: 'リーチ', likes: 'いいね', comments: 'コメント', saves: '保存', shares: 'シェア', follows: '新規フォロワー' };
       const el = document.getElementById('insStat');
-      el.innerHTML = `<div class="callout"><b>指標の並び（横1行）から ${items.length} 個の数値を検出</b>
+      el.innerHTML = `<div class="callout"><b>${degraded ? '数値を検出（並び順の自動判定はできませんでした）' : '指標の並び（横1行）から'} ${items.length} 個${degraded ? '' : 'を検出'}</b>
         <div style="margin:7px 0 4px">${asg.slots.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
           <span style="color:var(--cha);min-width:78px">${i === 0 ? 'いちばん左' : (i === asg.slots.length - 1 && asg.slots.length > 2) ? 'いちばん右' : (i + 1) + '番目'}</span>
           <b class="num" style="min-width:64px;text-align:right">${esc(x.it.raw || String(x.it.v))}</b>
           <select data-slot="${i}" style="width:auto;padding:4px 8px;font-size:12px">${['', 'reach', 'likes', 'comments', 'saves', 'shares', 'follows'].map(k => `<option value="${k}"${x.key === k ? ' selected' : ''}>${lbl[k]}</option>`).join('')}</select>
         </div>`).join('')}</div>
-        <div style="font-size:11.5px">スクリーンショットの<b>指標が並んでいる行</b>を左から順に読み、左端＝リーチ／右端＝保存として割り当てています。<b>必ず画像と照合し、違っていれば右のメニューで付け替えてください</b>（画像そのものは保存されません）。</div></div>`;
+        <div style="font-size:11.5px">スクリーンショットの<b>指標が並んでいる行</b>を左から順に読み、左端＝リーチ／右端＝保存として割り当てています（自動判定できなかった場合は上から順に入れています）。<b>必ず画像と照合し、違っていれば右のメニューで付け替えてください</b>（画像そのものは保存されません）。</div></div>`;
       el.querySelectorAll('select[data-slot]').forEach(sel => {
         sel.onchange = () => {
           const i = Number(sel.dataset.slot), k = sel.value;
