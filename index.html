@@ -2471,31 +2471,89 @@ function renderAccounts() {
 }
 function apiKeys() { if (!DB.api) DB.api = {}; return DB.api; }
 
+function igExtractId(token) {
+  return fetch('https://graph.facebook.com/v21.0/me/accounts?fields=name,instagram_business_account{id,username}&limit=50&access_token=' + encodeURIComponent(token))
+    .then(r => r.json()).then(j => {
+      if (j.error) throw new Error(j.error.message || 'Meta APIエラー');
+      const hit = (j.data || []).filter(x => x.instagram_business_account && x.instagram_business_account.id);
+      if (!hit.length) throw new Error('連携されたInstagramビジネスアカウントが見つかりません（Facebookページと連携したプロアカウントが必要です）');
+      return { id: hit[0].instagram_business_account.id, username: hit[0].instagram_business_account.username || '', page: hit[0].name || '' };
+    });
+}
+
 function renderApiForm() {
   const el = document.getElementById('apiForm'); if (!el) return;
   const k = apiKeys();
   el.innerHTML = `
-    <div class="callout">設定は任意です。<b>YouTube Data API キー</b>を入れると、URLを貼るだけでチャンネル名と登録者数を自動取得できます（Google Cloud で無料発行・公開データのみ取得）。<br>
-    <b>Instagram</b> は未ログインの外部アクセスを全面的にブロックしているため、URLだけでの取得はできません（Meta公式のビジネスディスカバリーAPIのみ）。表示名・フォロワー数はスクリーンショットからの取込をご利用ください。</div>
+    <div class="callout">URLから数値を自動取得するための設定です（任意）。<b>パスワードは使いません</b>。公式APIのトークン／キーだけを保存します。</div>
     <div class="fgrid" style="margin-top:12px">
       <div class="field wide"><label>YouTube Data API キー</label>
-        <input id="apiYt" value="${esc(k.yt || '')}" placeholder="AIzaSy... で始まるキー" autocomplete="off"></div>
-      <div class="field wide act-row"><button type="button" class="btn primary" id="apiSave">保存する</button></div>
-    </div>`;
+        <input id="apiYt" value="${esc(k.yt || '')}" placeholder="AIzaSy... で始まるキー" autocomplete="off">
+        <div style="font-size:10.5px;color:var(--cha);margin-top:4px">YouTubeのチャンネル名・登録者数をURLから自動取得できます（Google Cloudで無料発行）</div></div>
+      <div class="field wide"><label>Meta アクセストークン（Instagram用）</label>
+        <input id="apiFb" value="${esc(k.fbToken || '')}" placeholder="EAAG... で始まるトークン" autocomplete="off">
+        <div style="font-size:10.5px;color:var(--cha);margin-top:4px">Instagramプロアカウントのフォロワー数をURLから自動取得できます（約60日で失効・再発行できます）</div></div>
+      <div class="field wide"><label>Instagram ビジネスアカウントID</label>
+        <input id="apiIg" value="${esc(k.igUserId || '')}" placeholder="空欄のまま「アカウントIDを自動取得」を押してください" autocomplete="off"></div>
+      <div class="field wide act-row">
+        <button type="button" class="btn primary" id="apiSave">保存する</button>
+        <button type="button" class="btn" id="apiTest">接続テスト</button>
+        <button type="button" class="btn ghost" id="apiIgGet">アカウントIDを自動取得</button>
+      </div>
+      <div class="field wide" id="apiMsg" style="font-size:11.5px;color:var(--cha)"></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-weight:700;font-size:12.5px">Metaアクセストークンの取得手順（クリックで開く）</summary>
+      <ol style="font-size:12.5px;line-height:1.9;padding-left:20px;margin-top:8px">
+        <li>Instagramを<b>プロアカウント</b>（ビジネス／クリエイター）に切り替え、Facebookページと連携します</li>
+        <li>Meta for Developers で<b>アプリを作成</b>（タイプ：ビジネス）</li>
+        <li>アプリに Instagram 関連のプロダクトを追加し、権限 <code>instagram_basic</code> / <code>pages_show_list</code> / <code>pages_read_engagement</code> を付与</li>
+        <li>Graph API Explorer でそのアプリと権限を選び、<b>Generate Access Token</b></li>
+        <li>アクセストークンデバッガで <b>Extend Access Token</b>（約60日有効の長期トークンに延長）</li>
+        <li>上の欄に貼り付け → <b>アカウントIDを自動取得</b> → <b>保存する</b></li>
+      </ol>
+      <div class="callout" style="margin-top:8px">取得できるのは<b>プロアカウント（ビジネス／クリエイター）</b>の公開情報のみです。一般アカウントは対象外なので、スクリーンショットから取り込んでください。トークンが切れたら同じ手順で再発行してください。</div>
+    </details>`;
+  const msg = h => { const m = document.getElementById('apiMsg'); if (m) m.innerHTML = h; };
   document.getElementById('apiSave').onclick = () => {
-    const v = document.getElementById('apiYt').value.trim();
-    apiKeys().yt = v; save();
-    toast(v ? 'YouTube APIキーを保存しました' : 'APIキーを消去しました');
+    const k2 = apiKeys();
+    k2.yt = document.getElementById('apiYt').value.trim();
+    k2.fbToken = document.getElementById('apiFb').value.trim();
+    k2.igUserId = document.getElementById('apiIg').value.trim();
+    save(); msg('<span style="color:var(--mori-3)">保存しました。</span>'); toast('保存しました');
+  };
+  document.getElementById('apiTest').onclick = async () => {
+    const t = document.getElementById('apiFb').value.trim();
+    if (!t) { msg('<span style="color:var(--shu)">Metaアクセストークンを入力してください。</span>'); return; }
+    msg('接続を確認しています…');
+    try {
+      const res = await fetch('https://graph.facebook.com/v21.0/me?fields=id,name&access_token=' + encodeURIComponent(t));
+      const j = await res.json();
+      if (j.error) throw new Error(j.error.message || 'Meta APIエラー');
+      msg('<span style="color:var(--mori-3)">接続OK：' + esc(j.name || j.id) + '</span>');
+    } catch (e) { msg('<span style="color:var(--shu)">接続できませんでした：' + esc(e.message || '') + '</span>'); }
+  };
+  document.getElementById('apiIgGet').onclick = async () => {
+    const t = document.getElementById('apiFb').value.trim();
+    if (!t) { msg('<span style="color:var(--shu)">Metaアクセストークンを入力してください。</span>'); return; }
+    msg('ビジネスアカウントを探しています…');
+    try {
+      const info = await igExtractId(t);
+      document.getElementById('apiIg').value = info.id;
+      apiKeys().fbToken = t; apiKeys().igUserId = info.id; save();
+      msg('<span style="color:var(--mori-3)">取得しました：@' + esc(info.username || '?') + '（ページ：' + esc(info.page || '-') + '）</span>');
+    } catch (e) { msg('<span style="color:var(--shu)">取得できませんでした：' + esc(e.message || '') + '</span>'); }
   };
 }
+
 
 function openAccount(id, presetPlatform) {
   const a = id ? accById(id) : null;
   const d = Object.assign({ id: '', name: '', handle: '', platform: presetPlatform || 'Instagram', genre: '', followers: '', er: '', growth: '', note: '' }, a || {});
   openModal(a ? 'アカウントを編集' : 'アカウントを登録', `<form id="accForm" class="fgrid">
     <div class="field wide"><div class="callout">
-      <b>SNSのURLを貼る</b>と<b>URL先のページを確認して</b>取得できる情報を自動で入れます。<br>
-      取得できないSNS（Instagramなど）は、<b>スクリーンショットを添付</b>すると読み取ります。内容を確認・修正してから登録できます。
+      <b>SNSのURLを貼る</b>と<b>URL先のページを確認して</b>取得できる情報を自動で入れます（Instagram・YouTubeは公式API連携でフォロワー数も取得できます）。<br>
+      連携していないSNSは、<b>スクリーンショットを添付</b>すると読み取ります。内容を確認・修正してから登録できます。
     </div></div>
     <div class="field wide"><label>SNSのURL</label>
       <div class="inline">
@@ -2577,6 +2635,29 @@ function openAccount(id, presetPlatform) {
         stat('<span style="color:var(--mori-3)">YouTubeのページを確認しました：' + esc(t) + ' ／ 登録者 ' + nf(n) + '人 を取り込みました</span>');
       } catch (e) {
         stat('<span style="color:var(--shu)">YouTubeのページを確認できませんでした：' + esc(e.message || '') + '（キーをご確認ください。スクショからも取り込めます）</span>');
+      }
+      return;
+    }
+    if (r.platform === 'Instagram') {
+      const k = apiKeys();
+      const token = (k.fbToken || '').trim();
+      if (!token) { stat('<span style="color:var(--shu)">InstagramをURLから取得するには、<b>管理情報 → 外部連携</b>で Meta アクセストークンを設定してください（パスワードは不要・規約準拠の方法です）。未設定の場合はスクリーンショットから取り込めます。</span>'); return; }
+      stat('<span style="color:var(--cha)">Instagramのページを確認しています…</span>');
+      try {
+        let igId = (k.igUserId || '').trim();
+        if (!igId) { const info = await igExtractId(token); igId = info.id; k.igUserId = igId; save(); }
+        const res = await fetch('https://graph.facebook.com/v21.0/' + igId + '?fields=business_discovery.username(' + encodeURIComponent(r.handle) + '){username,name,followers_count,media_count}&access_token=' + encodeURIComponent(token));
+        const j = await res.json();
+        if (j.error) throw new Error(j.error.message || 'Meta APIエラー');
+        const bd = j.business_discovery || {};
+        const nm = bd.name || '';
+        const fc = Number(bd.followers_count) || 0;
+        if (nm && !form.elements['name'].value.trim()) { form.elements['name'].value = nm; RD.nameSrc = 'Instagramのページから'; }
+        if (fc && !form.elements['followers'].value) { form.elements['followers'].value = fc; RD.folSrc = 'Instagramのページから'; }
+        RD.url = true; paint();
+        stat('<span style="color:var(--mori-3)">Instagramのページを確認しました：' + esc(nm || ('@' + r.handle)) + ' ／ フォロワー ' + nf(fc) + '人 を取り込みました' + (bd.media_count ? '（投稿 ' + nf(Number(bd.media_count)) + '件）' : '') + '</span>');
+      } catch (e) {
+        stat('<span style="color:var(--shu)">Instagramのページを確認できませんでした：' + esc(e.message || '') + '<br><span style="font-size:11.5px">※ 取得できるのは<b>プロアカウント（ビジネス／クリエイター）</b>のみです。一般アカウントは対象外のため、スクリーンショットから取り込んでください。</span></span>');
       }
       return;
     }
