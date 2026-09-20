@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>GOURMET OS — グルメ系インフルエンサー 案件・インサイト管理</title>
+<title>AMOTI — グルメ系インフルエンサー 案件・インサイト管理</title>
 <meta name="description" content="グルメ系インフルエンサーのための案件・インサイト管理ツール。複数SNSアカウントの案件管理、投稿分析、2026年の仕様変更とステマ規制チェックを1つに。">
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#14483C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="GOURMET OS">
+<meta name="apple-mobile-web-app-title" content="AMOTI">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Shippori+Mincho+B1:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   GOURMET OS — 喫茶店の伝票とレジ台帳がモチーフ
+   AMOTI — 喫茶店の伝票とレジ台帳がモチーフ
    ============================================================ */
 :root{
   --sumi:#141C18;      /* 墨 */
@@ -677,7 +677,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
   <!-- ============ サイドバー ============ -->
   <aside class="rail">
     <div class="rail-head">
-      <div class="wordmark">GOURMET&nbsp;OS<small>CAMPAIGN &amp; INSIGHT DESK</small></div>
+      <div class="wordmark">AMOTI<small>SOCIAL ANALYTICS &amp; MANAGEMENT</small></div>
     </div>
     <div class="rail-primary" id="railPrimary">
       <button class="nav-btn on" data-view="dash" data-s="収支"><span class="lb">収支管理</span></button>
@@ -707,7 +707,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
   <main class="main">
     <header class="topbar">
       <div style="min-width:0">
-        <div class="brand-m">GOURMET OS</div>
+        <div class="brand-m">AMOTI</div>
         <h1 id="pageTitle">収支管理</h1>
         <div class="sub" id="pageSub">—</div>
       </div>
@@ -1116,7 +1116,7 @@ tr.rec.open .rec-caret{transform:rotate(90deg)}
 </div>
 <script>
 /* =========================================================================
-   GOURMET OS — コアロジック
+   AMOTI — コアロジック
    ========================================================================= */
 const KEY = 'gourmet_os_v1';
 /* プレビュー用：描画前の純粋なHTMLを控えておく（このスクリプトはbody末尾なのでDOMは完成済み） */
@@ -3214,7 +3214,7 @@ function showLogin() {
   const d = document.createElement('div');
   d.id = 'loginOv';
   d.innerHTML = '<div class="lg">'
-    + '<div class="wm">GOURMET OS</div><div class="sb">CAMPAIGN &amp; INSIGHT DESK</div>'
+    + '<div class="wm">AMOTI</div><div class="sb">SOCIAL ANALYTICS &amp; MANAGEMENT</div>'
     + '<label for="lgId">ID</label><input id="lgId" autocomplete="username">'
     + '<label for="lgPw">パスワード</label>'
     + '<div class="pwwrap"><input id="lgPw" type="password" autocomplete="current-password">'
@@ -3647,7 +3647,7 @@ function buildBrief() {
   const cell = v => String(v ?? '').replace(/\|/g, '/').replace(/\r?\n/g, ' ');
   const L = [];
   const totF = DB.accounts.reduce((s, a) => s + (Number(a.followers) || 0), 0);
-  L.push('# GOURMET OS 分析依頼');
+  L.push('# AMOTI 分析依頼');
   L.push('');
   L.push('日付：' + dFull(ymd(TODAY)) + ' ／ アカウント ' + DB.accounts.length + '件 ・ 案件 ' + DB.campaigns.length + '件 ・ 投稿ログ ' + DB.posts.length + '本 ・ 総フォロワー ' + nf(totF));
   L.push('');
