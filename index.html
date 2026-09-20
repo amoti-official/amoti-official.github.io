@@ -1114,7 +1114,12 @@ html{zoom:.7}
           <div class="callout ok" style="margin-top:12px">ホーム画面から起動するとURLバーが消えて全画面のアプリとして動きます。<b>電波が悪い店内でも開けます</b>（オフライン対応）。</div>
         </div>
       </div>
-    </section>
+    
+      <div class="card" style="margin-top:16px">
+        <div class="card-h"><h2>外部連携（URLから取得するためのキー）</h2><span class="hint">任意</span></div>
+        <div class="card-b" id="apiForm"></div>
+      </div>
+</section>
 
   </main>
 </div>
@@ -2464,20 +2469,41 @@ function renderAccounts() {
         <td class="num r">${avg ? yen(avg) + (unit ? ` <span style="font-size:10.5px;color:${unit < 2 ? 'var(--shu)' : unit > 4 ? 'var(--kohaku)' : 'var(--ok)'}">(${unit.toFixed(1)}円)</span>` : '') : '—'}</td></tr>`;
     }).join('')}</tbody></table>` : emptyBox('アカウント未登録');
 }
+function apiKeys() { if (!DB.api) DB.api = {}; return DB.api; }
+
+function renderApiForm() {
+  const el = document.getElementById('apiForm'); if (!el) return;
+  const k = apiKeys();
+  el.innerHTML = `
+    <div class="callout">設定は任意です。<b>YouTube Data API キー</b>を入れると、URLを貼るだけでチャンネル名と登録者数を自動取得できます（Google Cloud で無料発行・公開データのみ取得）。<br>
+    <b>Instagram</b> は未ログインの外部アクセスを全面的にブロックしているため、URLだけでの取得はできません（Meta公式のビジネスディスカバリーAPIのみ）。表示名・フォロワー数はスクリーンショットからの取込をご利用ください。</div>
+    <div class="fgrid" style="margin-top:12px">
+      <div class="field wide"><label>YouTube Data API キー</label>
+        <input id="apiYt" value="${esc(k.yt || '')}" placeholder="AIzaSy... で始まるキー" autocomplete="off"></div>
+      <div class="field wide act-row"><button type="button" class="btn primary" id="apiSave">保存する</button></div>
+    </div>`;
+  document.getElementById('apiSave').onclick = () => {
+    const v = document.getElementById('apiYt').value.trim();
+    apiKeys().yt = v; save();
+    toast(v ? 'YouTube APIキーを保存しました' : 'APIキーを消去しました');
+  };
+}
+
 function openAccount(id, presetPlatform) {
   const a = id ? accById(id) : null;
   const d = Object.assign({ id: '', name: '', handle: '', platform: presetPlatform || 'Instagram', genre: '', followers: '', er: '', growth: '', note: '' }, a || {});
   openModal(a ? 'アカウントを編集' : 'アカウントを登録', `<form id="accForm" class="fgrid">
     <div class="field wide"><div class="callout">
-      <b>SNSのURLを貼る</b>か<b>スクリーンショットを添付</b>すると、AIが読み取って下の欄に自動で入れます。<br>
-      読み取り結果を確認・修正してから登録できます。
+      <b>SNSのURLを貼る</b>と<b>URL先のページを確認して</b>取得できる情報を自動で入れます。<br>
+      取得できないSNS（Instagramなど）は、<b>スクリーンショットを添付</b>すると読み取ります。内容を確認・修正してから登録できます。
     </div></div>
     <div class="field wide"><label>SNSのURL</label>
       <div class="inline">
-        <input id="accLink" placeholder="https://www.instagram.com/moguo.osaka/?hl=ja" style="flex:1 1 240px">
-        <button type="button" class="btn" id="accLinkBtn">取込</button>
+        <input id="accLink" placeholder="https://www.instagram.com/moguo.osaka/?hl=ja" style="flex:1 1 200px">
+        <button type="button" class="btn" id="accLinkBtn">ページを確認して取込</button>
+        <button type="button" class="btn ghost" id="accOpenPage" disabled>プロフィールを開く</button>
       </div>
-      <div id="accLinkMsg" style="font-size:10.5px;color:var(--cha);margin-top:4px">貼り付けると媒体・ハンドルを自動で入れます</div>
+      <div id="accLinkMsg" style="font-size:10.5px;color:var(--cha);margin-top:4px">貼り付けると、媒体・ハンドルを入れてURL先のページを確認します</div>
     </div>
     <div class="field wide"><label>スクリーンショット</label>
       <div class="ins-drop" id="accDrop">クリックして画像を選択 ／ ここにドロップ ／ Ctrl+V で貼り付け</div>
@@ -2499,7 +2525,7 @@ function openAccount(id, presetPlatform) {
       ${a ? '<button type="button" class="btn shu" id="acDelete">削除</button>' : ''}
     </div></form>`);
   const form = document.getElementById('accForm');
-  const RD = { url: false, shot: false, nameSrc: '' };
+  const RD = { url: false, shot: false, nameSrc: '', folSrc: '' };
   const stat = h => { const el = document.getElementById('accStat'); if (el) el.innerHTML = h; };
   const paint = () => {
     const el = document.getElementById('accRead'); if (!el) return;
@@ -2507,16 +2533,55 @@ function openAccount(id, presetPlatform) {
     if (!RD.url && !RD.shot) { el.innerHTML = '<div class="callout">まだ読み取っていません。上の<b>URL取込</b>か<b>スクリーンショット</b>で自動入力できます。</div>'; return; }
     const row = (k, v, tag) => '<tr><th style="text-align:left;width:96px;color:var(--cha);font-weight:600;padding:5px 0">' + k + '</th><td style="padding:5px 6px">' + v + '</td><td style="text-align:right;padding:5px 0;font-size:11px;color:var(--cha)">' + tag + '</td></tr>';
     const na = '<span style="color:var(--cha)">未取得</span>';
-    el.innerHTML = '<div class="callout ok"><b>AIの読み取り結果</b>：違っていれば下の欄で直してください。</div>'
+    el.innerHTML = '<div class="callout ok"><b>読み取り結果</b>：違っていれば下の欄で直してください。</div>'
       + '<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px">'
       + row('表示名', f('name') ? esc(f('name')) : na, RD.nameSrc || '手入力')
       + row('ハンドル', f('handle') ? esc(f('handle')) : na, RD.url ? 'URLから' : '手入力')
       + row('媒体', esc(form.elements['platform'].value), RD.url ? 'URLから' : '手入力')
-      + row('フォロワー数', f('followers') ? nf(Number(f('followers'))) + '人' : na, RD.shot ? 'スクショから' : '手入力')
+      + row('フォロワー数', f('followers') ? nf(Number(f('followers'))) + '人' : na, RD.folSrc || '手入力')
       + '</table>';
   };
   document.getElementById('acCancel').onclick = closeModal;
   const linkIn = document.getElementById('accLink');
+  const fetchPage = async r => {
+    const url = profileUrl({ platform: r.platform, handle: r.handle });
+    if (r.platform === 'TikTok') {
+      stat('<span style="color:var(--cha)">TikTokのページを確認しています…</span>');
+      try {
+        const res = await fetch('https://www.tiktok.com/oembed?url=' + encodeURIComponent(url), { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const j = await res.json();
+        if (j.author_name && !form.elements['name'].value.trim()) { form.elements['name'].value = j.author_name; RD.nameSrc = 'TikTokのページから'; }
+        RD.url = true; paint();
+        stat('<span style="color:var(--mori-3)">TikTokのページを確認しました：表示名を入れました' + (j.author_name ? '（' + esc(j.author_name) + '）' : '') + '。フォロワー数はスクショから取り込めます。</span>');
+      } catch (e) {
+        stat('<span style="color:var(--shu)">TikTokのページを確認できませんでした：' + esc(e.message || '') + '（スクリーンショットから取り込めます）</span>');
+      }
+      return;
+    }
+    if (r.platform === 'YouTube') {
+      const key = (apiKeys().yt || '').trim();
+      if (!key) { stat('<span style="color:var(--shu)">YouTubeのチャンネル名・登録者数をURLから取得するには、<b>管理情報 → 外部連携</b>で YouTube Data API キーを設定してください（未設定でもスクリーンショットから取り込めます）。</span>'); return; }
+      stat('<span style="color:var(--cha)">YouTubeのページを確認しています…</span>');
+      try {
+        const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=' + encodeURIComponent(r.handle) + '&key=' + encodeURIComponent(key));
+        const j = await res.json();
+        if (j.error) throw new Error(j.error.message || 'APIエラー');
+        const it = (j.items || [])[0];
+        if (!it) throw new Error('チャンネルが見つかりませんでした');
+        const t = (it.snippet && it.snippet.title) || '';
+        const n = Number(it.statistics && it.statistics.subscriberCount) || 0;
+        if (t && !form.elements['name'].value.trim()) { form.elements['name'].value = t; RD.nameSrc = 'YouTubeのページから'; }
+        if (n && !form.elements['followers'].value) { form.elements['followers'].value = n; RD.folSrc = 'YouTubeのページから'; }
+        RD.url = true; paint();
+        stat('<span style="color:var(--mori-3)">YouTubeのページを確認しました：' + esc(t) + ' ／ 登録者 ' + nf(n) + '人 を取り込みました</span>');
+      } catch (e) {
+        stat('<span style="color:var(--shu)">YouTubeのページを確認できませんでした：' + esc(e.message || '') + '（キーをご確認ください。スクショからも取り込めます）</span>');
+      }
+      return;
+    }
+    stat('<span style="color:var(--shu)">' + esc(r.platform) + 'は未ログインの外部アクセスをブロックしているため、URLだけではページを確認できません（媒体・ハンドルは取り込みました）。</span><br><span style="font-size:11.5px;color:var(--cha)"><b>下のスクリーンショットから表示名とフォロワー数を取り込んでください</b>。「プロフィールを開く」→ スクショ → 貼り付け、が最短です。</span>');
+  };
   const take = () => {
     const r = parseProfileUrl(linkIn.value);
     const msg = document.getElementById('accLinkMsg');
@@ -2525,13 +2590,16 @@ function openAccount(id, presetPlatform) {
     form.elements['handle'].value = '@' + r.handle;
     if (!form.elements['name'].value.trim()) { form.elements['name'].value = r.handle; RD.nameSrc = 'URL（ハンドル）から'; }
     RD.url = true;
+    const op = document.getElementById('accOpenPage');
+    op.disabled = false; op.onclick = () => window.open(profileUrl({ platform: r.platform, handle: r.handle }), '_blank', 'noopener');
     const dup = DB.accounts.filter(x => String(x.handle || '').replace(/^@/, '').toLowerCase() === r.handle.toLowerCase() && (!a || x.id !== a.id))[0];
     msg.innerHTML = '<span style="color:var(--mori-3)">取り込みました：' + esc(r.platform) + ' / @' + esc(r.handle) + '</span>' + (dup ? '　※ 登録済み（' + esc(dup.name) + '）を更新します' : '');
     paint();
+    fetchPage(r);
   };
   document.getElementById('accLinkBtn').onclick = take;
   linkIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); take(); } };
-  linkIn.onpaste = () => setTimeout(take, 30);
+  linkIn.onpaste = () => setTimeout(take, 40);
   const runShot = async f => {
     if (!f) return;
     stat('<span style="color:var(--cha)">スクリーンショットを読み取っています…</span>');
@@ -2540,7 +2608,7 @@ function openAccount(id, presetPlatform) {
       const cands = ocrFollowerCandidates(data);
       const nm = ocrNameCandidate(data);
       if (nm && !form.elements['name'].value.trim()) { form.elements['name'].value = nm; RD.nameSrc = 'スクショから'; }
-      if (cands.length && !form.elements['followers'].value) form.elements['followers'].value = cands[0];
+      if (cands.length && !form.elements['followers'].value) { form.elements['followers'].value = cands[0]; RD.folSrc = 'スクショから'; }
       RD.shot = true;
       const box = document.getElementById('accCands');
       box.innerHTML = cands.length
@@ -2548,7 +2616,7 @@ function openAccount(id, presetPlatform) {
           + cands.map(v => '<button type="button" class="btn ghost" data-snc="' + v + '" style="font-size:12px">' + nf(v) + '</button>').join('') + '</div>'
         : '';
       Array.prototype.forEach.call(box.querySelectorAll('[data-snc]'), b => b.onclick = () => {
-        form.elements['followers'].value = b.dataset.snc; RD.shot = true; paint(); toast(nf(Number(b.dataset.snc)) + '人 を入れました');
+        form.elements['followers'].value = b.dataset.snc; RD.shot = true; RD.folSrc = 'スクショから'; paint(); toast(nf(Number(b.dataset.snc)) + '人 を入れました');
       });
       stat('<span style="color:var(--mori-3)">読み取り完了。内容を確認してください' + (nm ? '' : '（表示名は読み取れませんでした。手入力してください）') + '</span>');
       paint();
@@ -2598,17 +2666,6 @@ function openAccount(id, presetPlatform) {
     if (!a) { go('account'); openAccountDetail(target.id); }
   };
 }
-/* スクリーンショットを Ctrl+V で貼り付けたらアカウント登録モーダルに取り込む */
-document.addEventListener('paste', ev => {
-  if (!document.getElementById('accDrop')) return;
-  const it = ev.clipboardData && ev.clipboardData.items; if (!it) return;
-  for (let i = 0; i < it.length; i++) {
-    if (it[i].type && it[i].type.indexOf('image') === 0) {
-      const f = it[i].getAsFile();
-      if (f && window.__accShot) { window.__accShot(f); break; }
-    }
-  }
-});
 
 /* =========================================================================
    サイドバーのアカウント一覧 / モバイル帯
@@ -3372,7 +3429,7 @@ function render() {
   if (active === 'accounts') renderAccounts();
   if (active === 'insights') renderInsights();
   if (active === 'trends') renderTrends();
-  if (active === 'admin') renderData();
+  if (active === 'admin') { renderData(); renderApiForm(); }
   if (active === 'admin') renderAdmin();
   if (active === 'account') renderAccountDetail();
   if (active === 'schedule') renderSchedule();
