@@ -373,6 +373,23 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 }
 .mcard:last-child{margin-bottom:0}
 .mcard-h{font-weight:900;font-size:13.5px;line-height:1.5;margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed var(--line)}
+.mcard-gp{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 8px}
+.mcard-gp .gp-chip{display:inline-block;padding:2px 8px;font-size:11px;font-weight:800;color:var(--mori);background:#fff;border:1px solid var(--line);border-radius:999px;line-height:1.5}
+.mcard-gp .gp-chip.empty{color:var(--cha);background:transparent;font-weight:500}
+.gp-list{display:flex;flex-direction:column;gap:8px}
+.gp-row{display:grid;grid-template-columns:170px 1fr;gap:12px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.gp-row .gp-lab{display:flex;flex-direction:column;line-height:1.35}
+.gp-row .gp-lab b{font-size:13.5px;color:var(--mori);font-weight:900}
+.gp-row .gp-lab span{font-size:11px;color:var(--cha);margin-top:2px}
+.gp-row .gp-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.gp-cell{padding:8px 10px;border-radius:8px;display:flex;flex-direction:column;line-height:1.3}
+.gp-cell .k{font-size:10.5px;opacity:.85;font-weight:600}
+.gp-cell .v{font-size:14px;font-weight:900;font-family:var(--mono);margin-top:2px}
+.gp-cell.n{background:#f5eee8;color:var(--mori)}
+@media (max-width:820px){
+  .gp-row{grid-template-columns:1fr;gap:6px}
+  .gp-row .gp-cells{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 .mcard-h .num{font-size:13px}
 .mcard-r{display:flex;gap:10px;justify-content:space-between;align-items:baseline;padding:3.5px 0;font-size:12.5px}
 .mcard-r .k{color:var(--cha);font-size:11px;flex:0 0 auto}
@@ -937,6 +954,11 @@ html{zoom:.7}
       <div class="tape-top"></div>
       <div class="tape"><div class="kpis" id="adKpis"></div></div>
 
+      <div class="card" id="adGenrePriceCard" style="margin-top:22px">
+        <div class="card-h"><h2>ジャンル × 客単価の得意分野</h2><span class="hint">投稿インサイトから集計・平均リーチと平均ER%</span></div>
+        <div class="card-b"><div id="adGenrePrice"></div></div>
+      </div>
+
       <div class="card" style="margin-top:22px">
         <div class="card-h"><h2>フォロワー推移</h2><span class="hint" id="adFollowHint"></span>
           <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
@@ -952,7 +974,7 @@ html{zoom:.7}
           <div class="card-b"><div id="adChart"></div></div></div>
       </div>
 
-      <details class="card ad-posts-ac" id="adPostsAc" style="margin-top:22px" open>
+      <details class="card ad-posts-ac" id="adPostsAc" style="margin-top:22px">
         <summary class="card-h" style="cursor:pointer;list-style:none">
           <h2 style="display:inline-flex;align-items:center;gap:8px">投稿ログ<span class="ac-caret" aria-hidden="true">▾</span></h2>
           <span class="note" id="adPostBrief" style="margin-left:auto"></span>
@@ -1300,6 +1322,15 @@ function normalize(d) {
         ? Object.keys(Lv).map(function (kk) { var v = Lv[kk]; return (v && typeof v === 'object') ? v : { d: String(kk), v: Number(v) || 0 }; }).filter(function (r) { return r && r.d; })
         : [];
     }
+    /* 縦軸バグの原因（内部メタキー '_t' 等が数値として混入）をロード時に除去 */
+    d.followLog[k] = (d.followLog[k] || []).filter(function (r) {
+      if (!r || typeof r !== 'object') return false;
+      var ds = String(r.d || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return false;
+      var vv = Number(r.v);
+      if (!isFinite(vv) || vv < 0 || vv >= 1e9) return false;
+      return true;
+    });
   });
   d.campaigns = (d.campaigns || []).map(c => {
     if (!Array.isArray(c.accountIds)) c.accountIds = c.accountId ? [c.accountId] : [];
@@ -1372,6 +1403,23 @@ function followSeries(aid) {
       } else { Lv = []; }
       DB.followLog[aid] = Lv;
     }
+    /* 防御：'_t' 等の内部メタキーや異常値（タイムスタンプが混入したケース）を弾く。
+       - d は YYYY-MM-DD 形式のみ許可
+       - v は 0以上 1e9未満（10億フォロワー以上はアプリ想定外）に制限
+       - 未来日付は 今日 にクランプ */
+    var today = ymd(TODAY);
+    Lv = (Lv || []).filter(function (r) {
+      if (!r || typeof r !== 'object') return false;
+      var ds = String(r.d || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return false;
+      var v = Number(r.v);
+      if (!isFinite(v) || v < 0 || v >= 1e9) return false;
+      return true;
+    }).map(function (r) {
+      var ds = String(r.d);
+      if (ds > today) ds = today;
+      return { d: ds, v: Number(r.v) };
+    });
     return Lv.slice().sort((x, y) => (x.d < y.d ? -1 : 1));
   } catch (e) { return []; }
 }
@@ -1385,9 +1433,11 @@ function followDelta(aid, days) {
   return (Number(last.v) || 0) - (Number(prev.v) || 0);
 }
 function recordFollow(aid, v, ds) {
-  v = Number(v) || 0; if (!aid || v <= 0) return false;
-  DB.followLog[aid] = DB.followLog[aid] || [];
+  v = Number(v) || 0;
+  if (!aid || v <= 0 || v >= 1e9) return false;   /* 10億フォロワー以上は誤入力扱い（タイムスタンプ混入対策） */
   const d = ds || ymd(TODAY);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return false;
+  if (!Array.isArray(DB.followLog[aid])) DB.followLog[aid] = [];
   const ex = DB.followLog[aid].find(x => x.d === d);
   if (ex) ex.v = v; else DB.followLog[aid].push({ d, v });
   DB.followLog[aid].sort((x, y) => (x.d < y.d ? -1 : 1));
@@ -1940,7 +1990,7 @@ function renderCampaigns() {
       const flag = c.dropped ? 'var(--cha)' : late ? 'var(--shu)' : c.status === '入金済' ? 'var(--ok)' : c.status === '請求中' ? 'var(--kohaku)' : 'var(--mori-3)';
       return `<tr class="rec ${open ? 'open' : ''}" data-rec="${esc(c.id)}">
         <td><span class="rec-dot" style="background:${flag}" title="${c.dropped ? '見送り' : c.status}"></span></td>
-        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}</td>
+        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}<div style="font-size:10.5px;font-weight:700;color:var(--mori-3);margin-top:3px;line-height:1.4;font-family:var(--sans);text-align:left">${(c.genre && c.genre !== '未設定') ? esc(c.genre) : (c.type ? esc(c.type) : '<span style="color:var(--cha);font-weight:500">ジャンル未登録</span>')}<br>${(c.priceRange && c.priceRange !== '未設定') ? esc(c.priceRange) : '<span style="color:var(--cha);font-weight:500">客単価未登録</span>'}</div></td>
         <td>${campHead(c)}</td>
         <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0" title="${esc(a.name)}">${esc(accLabel(a.name))}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
         <td class="num r">${yen(c.reward)}</td>
@@ -3509,15 +3559,64 @@ function renderAccountDetail() {
   _set('adPostBrief', posts.length ? `${posts.length}本（新しい順）` : '');
   const desc = [...posts].reverse().slice(0, 40);
   _set('adPosts', desc.length ? `<table>
-    <thead><tr><th>日付</th><th>形式</th><th class="num r">リーチ</th><th class="num r">いいね</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th><th>案件</th></tr></thead>
-    <tbody>${desc.map(p => { const m = metrics(p); return `
+    <thead><tr><th>日付／店舗</th><th>形式</th><th class="num r">リーチ</th><th class="num r">いいね</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th><th>案件</th></tr></thead>
+    <tbody>${desc.map(p => { const m = metrics(p); const _c = p.campaignId ? campById(p.campaignId) : null; return `
       <tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
-        <td class="num">${esc(jYMD(p.date))}</td>
+        <td class="num">${esc(jYMD(p.date))}${_c && _c.client ? `<div style="font-size:10.5px;color:var(--cha);font-weight:600;margin-top:2px;font-family:var(--sans);text-align:left">${esc(_c.client)}</div>` : ''}</td>
         <td><span class="chip">${esc(p.format)}</span></td>
         <td class="num r">${nf(p.reach)}</td><td class="num r">${nf(p.likes)}</td><td class="num r">${nf(p.saves)}</td><td class="num r">${nf(p.shares)}</td>
         <td class="num r" style="font-weight:700">${pct(m.er)}</td>
-        <td>${p.campaignId ? esc(campById(p.campaignId)?.title || '案件') : '<span style="color:var(--cha)">—</span>'}</td></tr>`; }).join('')}</tbody></table>`
+        <td>${_c ? esc(_c.title || '案件') : '<span style="color:var(--cha)">—</span>'}</td></tr>`; }).join('')}</tbody></table>`
     : emptyBox('投稿ログを追加すると、この画面に数字が集まります'), 'innerHTML');
+
+  /* ジャンル × 客単価の得意分野 */
+  _set('adGenrePrice', renderAccountGenrePrice(a.id), 'innerHTML');
+}
+
+/* このアカウントの投稿を「案件のジャンル × 客単価」でクロス集計してヒートマップ描画 */
+function renderAccountGenrePrice(accId) {
+  const posts = DB.posts.filter(p => p.accountId === accId && p.campaignId);
+  if (!posts.length) return emptyBox('案件に紐づく投稿がまだありません。案件を登録して投稿ログを追加すると、ここに「得意分野」が可視化されます。');
+  const bucket = {};
+  posts.forEach(p => {
+    const c = campById(p.campaignId); if (!c) return;
+    const g = (c.genre && c.genre !== '未設定') ? c.genre : (c.type || '未登録');
+    const pr = (c.priceRange && c.priceRange !== '未設定') ? c.priceRange : '未登録';
+    const key = g + '\u0000' + pr;
+    (bucket[key] = bucket[key] || { g, pr, reach: 0, er: 0, n: 0 });
+    const m = metrics(p);
+    bucket[key].reach += (Number(p.reach) || 0);
+    bucket[key].er += m.er;
+    bucket[key].n += 1;
+  });
+  const rows = Object.values(bucket).map(b => ({
+    g: b.g, pr: b.pr, n: b.n,
+    avgReach: b.n ? Math.round(b.reach / b.n) : 0,
+    avgEr: b.n ? b.er / b.n : 0
+  }));
+  if (!rows.length) return emptyBox('集計できるデータがありません。');
+  const maxReach = Math.max(1, ...rows.map(r => r.avgReach));
+  const maxEr = Math.max(0.01, ...rows.map(r => r.avgEr));
+  /* リーチとER の合成スコアで並べる（0-1 正規化して 0.6:0.4） */
+  rows.forEach(r => { r.score = (r.avgReach / maxReach) * 0.6 + (r.avgEr / maxEr) * 0.4; });
+  rows.sort((a, b) => b.score - a.score);
+  const best = rows[0];
+  const tone = s => { /* 0..1 → 朱赤〜琥珀のグラデ */
+    const t = Math.max(0, Math.min(1, s));
+    const a = 0.16 + 0.62 * t;
+    return `background:rgba(179,63,45,${a.toFixed(3)});color:${t > 0.5 ? '#fff' : 'var(--mori)'}`;
+  };
+  const bar = rows.slice(0, 10).map(r => `
+    <div class="gp-row">
+      <div class="gp-lab"><b>${esc(r.g)}</b><span>${esc(r.pr)}</span></div>
+      <div class="gp-cells">
+        <div class="gp-cell" style="${tone(r.avgReach / maxReach)}"><span class="k">平均リーチ</span><span class="v">${wan(r.avgReach)}</span></div>
+        <div class="gp-cell" style="${tone(r.avgEr / maxEr)}"><span class="k">平均ER</span><span class="v">${r.avgEr.toFixed(2)}%</span></div>
+        <div class="gp-cell n"><span class="k">投稿</span><span class="v">${r.n}本</span></div>
+      </div>
+    </div>`).join('');
+  const summary = `<div class="callout" style="margin:0 0 12px">得意分野：<b>${esc(best.g)}</b> × <b>${esc(best.pr)}</b>（平均リーチ ${wan(best.avgReach)} ／ 平均ER ${best.avgEr.toFixed(2)}% ／ ${best.n}本）</div>`;
+  return summary + '<div class="gp-list">' + bar + '</div>';
 }
 
 /* =========================================================================
@@ -4182,6 +4281,16 @@ function packCampCards() {
     }
     const _camp = card.dataset.rec ? campById(card.dataset.rec) : null;
     const _accs = _camp ? campAccs(_camp) : [];
+    if (_camp) {
+      const _g = (_camp.genre && _camp.genre !== '未設定') ? _camp.genre : (_camp.type || '');
+      const _pr = (_camp.priceRange && _camp.priceRange !== '未設定') ? _camp.priceRange : '';
+      const gp = document.createElement('div');
+      gp.className = 'mcard-gp';
+      gp.innerHTML =
+        (_g ? `<span class="gp-chip">${esc(_g)}</span>` : `<span class="gp-chip empty">ジャンル未登録</span>`)
+        + (_pr ? `<span class="gp-chip">${esc(_pr)}</span>` : `<span class="gp-chip empty">客単価未登録</span>`);
+      head.insertAdjacentElement('afterend', gp);
+    }
     if (_camp && _accs.length > 1) {
       live().forEach(r => { const k = r.querySelector('.k'); const lb = k ? k.textContent : ''; if (/アカウント|報酬|投稿日|インサイト/.test(lb)) r.remove(); });
       const box = document.createElement('div'); box.className = 'pacc';
