@@ -1014,9 +1014,12 @@ html{zoom:.7}
       </div>
       <div class="card ai-scan" id="trendScanBar" style="margin-bottom:14px">
         <div class="card-b" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px">
-          <span style="font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mori-3);background:var(--mori-pale);padding:3px 8px;border-radius:999px">AI 分析</span>
+          <span style="font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mori-3);background:var(--mori-pale);padding:3px 8px;border-radius:999px">🤖 AI トレンドレポート</span>
           <span id="trendScanStatus" style="font-size:12.5px;color:var(--cha);flex:1;min-width:180px"></span>
-          <button type="button" class="btn sm ghost" id="trendScanBtn">今すぐAI分析</button>
+          <button type="button" class="btn sm ghost" id="trendScanBtn">最新を取得</button>
+        </div>
+        <div style="padding:0 14px 12px;font-size:10.5px;color:var(--cha);line-height:1.6">
+          Genspark Workflows が毎朝8時（JST）にWeb検索でSNS仕様変更を収集し、Supabase に保存 → このアプリが読み込みます。
         </div>
       </div>
       <div class="callout" style="margin-bottom:18px">
@@ -3670,7 +3673,7 @@ function postForm(p) {
 /* =========================================================================
    トレンド・仕様変更（2026年）
    ========================================================================= */
-const NEWS = [
+let NEWS = [
   { d: '2026-08-27', m: 'Instagram', i: 5, t: 'Instagramアルゴリズムガイド 2026年8月版が公開',
     b: '9つの公式アップデートを反映。閲覧数（Views）とDMシェアの重視が継続し、AIによるパーソナライズが前提に。前回版（2025年11月）からの差分に「更新」マーク付き。',
     s: [['PR TIMES', 'https://prtimes.jp/main/html/rd/p/000000206.000002036.html']] },
@@ -3767,22 +3770,20 @@ function renderTrends() {
     }
     if (btn && !btn.dataset.wired) {
       btn.dataset.wired = '1';
-      btn.onclick = () => {
-        btn.disabled = true; const orig = btn.textContent; btn.textContent = 'AIが分析中…';
-        setTimeout(() => {
-          try {
-            DB.trends = DB.trends || {};
-            DB.trends.scannedAt = new Date().toISOString();
-            save();
-            const n = newsUnseenCount();
-            if (n > 0) toast('AI分析：新しいトレンドが ' + n + ' 件見つかりました');
-            else toast('AI分析：新しいトレンドはありません');
-            markTrendsSeen();
-            renderTrends();
-            updateTrendsNav();
-          } catch (e) {}
-          btn.disabled = false; btn.textContent = orig;
-        }, 900);
+      btn.onclick = async () => {
+        btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Supabase から取得中…';
+        try {
+          _trendsMerged = false; /* 再取得を許可 */
+          const added = await refreshTrends();
+          DB.trends = DB.trends || {};
+          DB.trends.scannedAt = new Date().toISOString();
+          save();
+          if (added > 0) toast('AI トレンドレポート：新しい記事を ' + added + ' 件取得しました');
+          else toast('AI トレンドレポート：新しい記事はありません');
+          renderTrends();
+          updateTrendsNav();
+        } catch (e) { toast('取得に失敗しました：' + (e && e.message || e)); }
+        btn.disabled = false; btn.textContent = orig;
       };
     }
   } catch (e) {}
@@ -3937,7 +3938,8 @@ function showLogin() {
     try { render(); } catch (e3) {}
     toast('ログインしました');
     setTimeout(followDailyCheck, 400);
-    setTimeout(trendsLoginCheck, 900);
+    setTimeout(() => { try { trendsAutoInit(); } catch (e) {} }, 600);
+    setTimeout(trendsLoginCheck, 1600);
   };
   document.getElementById('lgGo').onclick = doLogin;
   ['lgId', 'lgPw'].forEach(k => {
@@ -5358,6 +5360,49 @@ async function sbLoadState() {
   const rows = await sbFetch('/rest/v1/amoti_share?id=eq.' + SB_ROW + '&select=state,updated_at', { method: 'GET' });
   return (rows && rows[0]) || null;
 }
+/* ============ AI トレンド記事：Supabase から読み込み → NEWS にマージ ============ */
+let _trendsMerged = false;
+async function sbLoadTrends() {
+  try {
+    const rows = await sbFetch('/rest/v1/amoti_trends?select=id,d,m,i,t,b,s,ai_model,scanned_at&order=d.desc&limit=200', { method: 'GET' });
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) { return []; }
+}
+function mergeTrendsIntoNews(rows) {
+  if (!Array.isArray(rows) || !rows.length) return 0;
+  const seen = new Set(NEWS.map(n => (n.d || '') + '|' + (n.t || '')));
+  let added = 0;
+  rows.forEach(r => {
+    const key = (r.d || '') + '|' + (r.t || '');
+    if (seen.has(key)) return;
+    NEWS.unshift({
+      d: r.d, m: r.m, i: Number(r.i) || 3,
+      t: r.t, b: r.b,
+      s: Array.isArray(r.s) ? r.s : []
+    });
+    seen.add(key); added++;
+  });
+  /* 日付降順に並び替え */
+  NEWS.sort((a, b) => (newsSortKey(b.d) > newsSortKey(a.d) ? 1 : -1));
+  return added;
+}
+async function refreshTrends() {
+  const rows = await sbLoadTrends();
+  const added = mergeTrendsIntoNews(rows);
+  DB.trends = DB.trends || {};
+  DB.trends.aiScannedAt = new Date().toISOString();
+  if (rows.length) DB.trends.aiTotalRows = rows.length;
+  save();
+  return added;
+}
+function trendsAutoInit() {
+  if (_trendsMerged) return; _trendsMerged = true;
+  refreshTrends().then(added => {
+    try {
+      if (added > 0) { renderTrends(); updateTrendsNav(); trendsLoginCheck(); }
+    } catch (e) {}
+  }).catch(() => {});
+}
 async function sbSaveState(state) {
   await sbFetch('/rest/v1/amoti_share', {
     method: 'POST',
@@ -5510,7 +5555,10 @@ function ensureSharedCard() {
   document.getElementById('shUpd').onclick = function () { sbForceUpdate(); };
   shInfo();
 }
-function sbInit() { setTimeout(function () { try { shSync(false); } catch (e) {} }, 800); }
+function sbInit() {
+  setTimeout(function () { try { shSync(false); } catch (e) {} }, 800);
+  setTimeout(function () { try { trendsAutoInit(); } catch (e) {} }, 1400);
+}
 setInterval(function () { try { sbCheckUpdate(); } catch (e) {} }, 300000);
 setTimeout(function () { try { sbCheckUpdate(); } catch (e) {} }, 4000);
 window.addEventListener('visibilitychange', function () { if (!document.hidden) { try { shSync(false); } catch (e) {} } });
