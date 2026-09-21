@@ -4575,7 +4575,7 @@ function ensureSharedCard() {
   document.getElementById('shNow').onclick = () => shSync(true);
   shInfo();
 }
-setInterval(() => { try { if (shReady()) shSync(false); } catch (e) {} }, 20000);
+setInterval(() => { try { if (shReady()) shSync(false); } catch (e) {} }, 10000);
 window.addEventListener('focus', () => { try { if (shReady()) shSync(false); } catch (e) {} });
 
 
@@ -4586,7 +4586,7 @@ window.addEventListener('focus', () => { try { if (shReady()) shSync(false); } c
 const SB_URL = 'https://nqvgbejvrpwestkdqvav.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xdmdiZWp2cnB3ZXN0a2RxdmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4OTU2MDMsImV4cCI6MjEwNTQ3MTYwM30.2Sx7PjUMQbYtKunGRIjen_KYSNEMEjd-gRWuUXep5b4';
 const SB_ROW = 'team';
-const SB_VER = 'v2';
+const SB_VER = 'v3';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
@@ -4615,15 +4615,34 @@ async function sbSaveState(state) {
 }
 function shReady() { return true; }
 function shSay(h) { const el = document.getElementById('shMsg'); if (el) el.innerHTML = h; }
+function sbBusy() {
+  try {
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || '')) return true;
+    const nodes = document.querySelectorAll('.modal, .inv-sheet');
+    for (let i = 0; i < nodes.length; i++) {
+      const st = window.getComputedStyle(nodes[i]);
+      if (st.display !== 'none' && st.visibility !== 'hidden' && nodes[i].getBoundingClientRect().height > 0) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+function sbApplyPending() {
+  try { DB.api.sbPending = 0; DB.api.sbErr = ''; saveLocal(); refreshFilterSelects(); render(); } catch (e) {}
+  shInfo();
+}
 function shInfo() {
   const c = DB.api || {};
   const ts = c.sbAt ? ('最終同期 ' + esc(jDT(c.sbAt))) : 'まだ同期していません';
   const s = c.sbSrv;
   const srv = s ? ('アカウント ' + s.a + '件・案件 ' + s.c + '件・投稿 ' + s.p + '件') : 'まだ取得していません';
   const bad = c.sbErr ? ('<div class="callout warn">前回の同期でエラー：' + esc(c.sbErr) + '</div>') : '';
+  const pend = c.sbPending ? ('<div class="callout warn">他の人の更新を取り込み済みです（入力中だったため表示を保留しています）。<button type="button" class="btn ghost" id="shApply" style="margin-left:8px">表示を更新</button></div>') : '';
   shSay('<div class="callout' + (c.sbErr ? ' warn' : '') + '"><b>' + ts + '</b>（同期エンジン ' + SB_VER + '）' +
     '<br>この端末：アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '件' +
-    '<br>サーバー：' + srv + '</div>' + bad);
+    '<br>サーバー：' + srv + '</div>' + bad + pend);
+  const ap = document.getElementById('shApply');
+  if (ap) ap.onclick = function () { sbApplyPending(); };
 }
 async function shSync(manual) {
   if (_inSync) return;
@@ -4673,14 +4692,20 @@ async function shSync(manual) {
       db.api = keepApi; db.auth = DB.auth; db.savedAt = DB.savedAt;
       DB = normalize(db);
       recStamp();
-      saveLocal(); refreshFilterSelects(); render();
-      toast('他の人の更新を取り込みました');
+      saveLocal();
+      if (sbBusy()) {
+        DB.api.sbPending = Date.now();
+        toast('他の人の更新を取り込みました（入力中のため画面はそのまま）');
+      } else {
+        refreshFilterSelects(); render();
+        toast('他の人の更新を取り込みました');
+      }
     } else {
       saveLocal();
       if (manual) { shSay('<div class="callout">' + (needPush ? 'この端末の内容をサーバーへ送信しました。' : '最新の状態です（送信の必要なし）') + '</div>'); render(); }
     }
-    shInfo();
-  } catch (e) {
+    if (DB.api.sbPending && !sbBusy()) sbApplyPending();
+    shInfo();  } catch (e) {
     DB.api.sbErr = String((e && e.message) || e);
     shSay('<div class="callout warn">同期できませんでした：' + esc(DB.api.sbErr) + '</div>');
   }
@@ -4693,7 +4718,7 @@ function ensureSharedCard() {
   const host = anchor.closest('.card'); if (!host) return;
   if (document.getElementById('sharedCard')) { shInfo(); return; }
   const card = document.createElement('div'); card.className = 'card'; card.id = 'sharedCard'; card.style.marginTop = '18px';
-  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">v2・設定は不要</span></div>' +
+  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">v3・設定は不要</span></div>' +
     '<div class="card-b">' +
     '<div class="callout"><b>IDもパスワードもワークスペース作成も不要です。</b>このアプリを開いているだけで、編集した内容は自動でサーバーへ保存され、他のPC・スマホと同じデータになります（開いている間は約20秒ごとに取り込み、タブに戻ったときにも同期します）。</div>' +
     '<div class="inline" style="margin-top:12px">' +
