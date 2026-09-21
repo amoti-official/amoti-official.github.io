@@ -4545,7 +4545,7 @@ async function shSync(manual) {
       DB = normalize(db);
       recStamp();
       saveLocal(); refreshFilterSelects(); render();
-      toast('他の端末の更新を取り込みました');
+      void 0;
       shSay('<div class="callout"><b>取り込みました。</b>アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>');
     } else {
       saveLocal();
@@ -4818,10 +4818,10 @@ async function shSync(manual) {
       saveLocal();
       if (sbBusy()) {
         DB.api.sbPending = Date.now();
-        toast('他の人の更新を取り込みました（入力中のため画面はそのまま）');
+        void 0;
       } else {
         refreshFilterSelects(); render();
-        toast('他の人の更新を取り込みました');
+        void 0;
       }
     } else {
       saveLocal();
@@ -4910,6 +4910,25 @@ go(VIEW_TITLES[h] ? h : 'dash');
 #devPreview .dev-bar button:hover{background:rgba(255,255,255,.12)}
 #devPreview .dev-phone{width:390px;height:844px;max-height:calc(96vh - 44px);background:#fff;position:relative}
 #devPreview .dev-phone iframe{width:390px;height:100%;border:0;display:block}
+</style>
+<style id="amotiTweaks">
+/* スマホ：上部の追加ボタン群（＋分析／＋媒体／＋投稿／＋案件）は表示しない */
+@media (max-width:860px){ .topbar-right{display:none!important} }
+/* 案件管理：レコードと検索枠をすこし狭く・スマートに */
+@media (min-width:861px){
+  #view-campaigns .card{max-width:1140px;margin-left:auto;margin-right:auto}
+  #view-campaigns .tbl{max-width:1140px;margin-left:auto;margin-right:auto}
+}
+@media (max-width:860px){
+  #view-campaigns .card{margin-bottom:12px}
+  #view-campaigns .card-b{padding:12px 12px 10px}
+  #view-campaigns .inline{gap:8px}
+  #view-campaigns .field{flex:1 1 calc(50% - 8px)!important;min-width:0}
+  #view-campaigns .field label{font-size:10px;letter-spacing:.02em}
+  #view-campaigns .field input,#view-campaigns .field select{padding:8px 9px;font-size:12px}
+  #view-campaigns .rec-panel{padding:10px 12px 12px}
+  #view-campaigns .rec-grid{gap:6px 10px;margin-bottom:8px}
+}
 </style>
 <div id="devPreview" aria-hidden="true">
   <div class="dev-box">
