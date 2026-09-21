@@ -3855,6 +3855,59 @@ function applyMobileTables() {
     tw.appendChild(wrap);
   });
 }
+/* 案件管理のスマホカード：日時＋名称＋ステータス＋請求書を1行目へ／報酬額と投稿日を横並び／インサイトを1行 */
+function packCampCards() {
+  if (!MQ_MOBILE()) return;
+  document.querySelectorAll('#view-campaigns .tw .mcards .mcard').forEach(card => {
+    if (card.dataset.packed === '1') return;
+    const rows = [...card.children].filter(el => el.classList.contains('mcard-r'));
+    const head = card.querySelector('.mcard-h');
+    if (!head) return;
+    const pick = re => { for (const r of rows) { const k = r.querySelector('.k'); if (k && re.test(k.textContent || '')) return r; } return null; };
+    const rCli = pick(/クライアント|店舗/), rAcc = pick(/アカウント/), rRew = pick(/報酬/), rPost = pick(/投稿日/);
+    const rIns = pick(/インサイト/), rSt = pick(/ステータス/), rInv = pick(/請求書/);
+    if (rCli) {
+      const nm = rCli.querySelector('.v');
+      if (nm && nm.textContent.trim()) {
+        const s = document.createElement('span'); s.className = 'nm'; s.textContent = nm.textContent.trim();
+        head.appendChild(s);
+      }
+      rCli.remove();
+    }
+    if (rSt || rInv) {
+      const acts = document.createElement('span'); acts.className = 'acts';
+      [rSt, rInv].forEach(r => {
+        if (!r) return;
+        const v = r.querySelector('.v');
+        if (v) { while (v.firstChild) acts.appendChild(v.firstChild); }
+        r.remove();
+      });
+      if (acts.childNodes.length) head.appendChild(acts);
+    }
+    if (rAcc) rAcc.classList.add('stk');
+    if (rRew && rPost) {
+      const two = document.createElement('div'); two.className = 'mcard-r two';
+      [[rRew, '報酬額'], [rPost, '投稿日']].forEach(([r, lab]) => {
+        const pair = document.createElement('span'); pair.className = 'pair';
+        const k = document.createElement('span'); k.className = 'k'; k.textContent = lab;
+        const v = r.querySelector('.v'); if (v) v.style.textAlign = 'left';
+        pair.appendChild(k); if (v) pair.appendChild(v);
+        two.appendChild(pair);
+      });
+      if (rIns) card.insertBefore(two, rIns); else card.appendChild(two);
+      rRew.remove(); rPost.remove();
+    }
+    if (rIns) {
+      const v = rIns.querySelector('.v');
+      if (v && v.children.length > 1) {
+        const parts = [...v.children].map(c => (c.textContent || '').trim()).filter(Boolean);
+        if (parts.length > 1) v.textContent = parts.join(' / ');
+      }
+      if (v) v.classList.add('one');
+    }
+    card.dataset.packed = '1';
+  });
+}
 let lastMQ = MQ_MOBILE(), mqTimer;
 window.addEventListener('resize', () => {
   clearTimeout(mqTimer);
@@ -3879,6 +3932,7 @@ function render() {
   if (_fs) _fs.textContent =
     '最終更新 ' + TODAY.getFullYear() + '.' + String(TODAY.getMonth()+1).padStart(2,'0') + '.' + String(TODAY.getDate()).padStart(2,'0');
   applyMobileTables();
+  packCampCards();
 }
 function fillSelect(el, items, allLabel) {
   el.innerHTML = `<option value="">${esc(allLabel)}</option>` + items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
@@ -4928,6 +4982,17 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .field input,#view-campaigns .field select{padding:8px 9px;font-size:12px}
   #view-campaigns .rec-panel{padding:10px 12px 12px}
   #view-campaigns .rec-grid{gap:6px 10px;margin-bottom:8px}
+}
+  #view-campaigns .mcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12.5px}
+  #view-campaigns .mcard-h .nm{font-weight:900;font-size:13px;font-family:var(--sans)}
+  #view-campaigns .mcard-h .acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  #view-campaigns .mcard-h .acts .st-sel{padding:3px 7px;font-size:10.5px;min-height:25px;font-weight:800}
+  #view-campaigns .mcard-h .acts .btn{padding:3px 8px;font-size:10.5px;min-height:25px}
+  #view-campaigns .mcard-r.stk{display:block}
+  #view-campaigns .mcard-r.stk .v{display:block;text-align:left;margin-top:2px}
+  #view-campaigns .mcard-r.two{justify-content:flex-start;gap:18px}
+  #view-campaigns .mcard-r.two .pair{display:inline-flex;gap:6px;align-items:baseline}
+  #view-campaigns .mcard-r .v.one{white-space:nowrap;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 }
 </style>
 <div id="devPreview" aria-hidden="true">
