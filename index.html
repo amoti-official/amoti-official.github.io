@@ -1296,6 +1296,15 @@ function load() {
 function normalize(d) {
   d.profile = Object.assign({}, PROF_DEF, d.profile || {});
   d.followLog = d.followLog || {};
+  if (!d.followLog || typeof d.followLog !== 'object' || Array.isArray(d.followLog)) d.followLog = {};
+  Object.keys(d.followLog).forEach(function (k) {
+    var Lv = d.followLog[k];
+    if (!Array.isArray(Lv)) {
+      d.followLog[k] = (Lv && typeof Lv === 'object')
+        ? Object.keys(Lv).map(function (kk) { var v = Lv[kk]; return (v && typeof v === 'object') ? v : { d: String(kk), v: Number(v) || 0 }; }).filter(function (r) { return r && r.d; })
+        : [];
+    }
+  });
   d.campaigns = (d.campaigns || []).map(c => {
     if (!Array.isArray(c.accountIds)) c.accountIds = c.accountId ? [c.accountId] : [];
     if (c.dropped === undefined) c.dropped = (c.status === '見送り');
@@ -1352,7 +1361,19 @@ const campFollowers = c => campAccIds(c).reduce((s, id) => s + (Number(accById(i
 const cUnit = c => { const f = campFollowers(c); return f ? (Number(c.reward) || 0) / f : 0; };
 
 /* ---------- フォロワー履歴 ---------- */
-function followSeries(aid) { return (DB.followLog[aid] || []).slice().sort((x, y) => (x.d < y.d ? -1 : 1)); }
+function followSeries(aid) {
+  try {
+    if (!DB.followLog || typeof DB.followLog !== 'object' || Array.isArray(DB.followLog)) DB.followLog = {};
+    var Lv = DB.followLog[aid];
+    if (!Array.isArray(Lv)) {
+      if (Lv && typeof Lv === 'object') {
+        Lv = Object.keys(Lv).map(function (k) { var v = Lv[k]; return (v && typeof v === 'object') ? v : { d: String(k), v: Number(v) || 0 }; }).filter(function (r) { return r && r.d; });
+      } else { Lv = []; }
+      DB.followLog[aid] = Lv;
+    }
+    return Lv.slice().sort((x, y) => (x.d < y.d ? -1 : 1));
+  } catch (e) { return []; }
+}
 function latestFollow(aid) { const s = followSeries(aid); return s.length ? s[s.length - 1] : null; }
 function followDelta(aid, days) {
   const s = followSeries(aid); if (s.length < 2) return 0;
@@ -2279,7 +2300,7 @@ function parseProfileUrl(u) {
 function followDueList() {
   const t = ymd(TODAY);
   return DB.accounts.filter(a => {
-    const log = (DB.followLog && DB.followLog[a.id]) || [];
+    let log; try { log = followSeries(a.id); } catch (e) { log = []; }
     const last = log.length ? log[log.length - 1] : null;
     return !last || last.d !== t;
   });
@@ -4902,6 +4923,11 @@ go(VIEW_TITLES[h] ? h : 'dash');
   var fr = document.getElementById('devFrame');
   if (!btn || !ov || !fr) return;
   var opened = false;
+  function syncOff() {
+    var b = document.getElementById('jsErrBar');
+    btn.style.bottom = (b && b.offsetHeight > 0) ? (b.offsetHeight + 16) + 'px' : '14px';
+  }
+  setInterval(syncOff, 1000); window.addEventListener('resize', syncOff);
   function openIt() {
     if (!fr.getAttribute('src')) { fr.setAttribute('src', location.pathname + location.search + location.hash); }
     ov.className = 'on'; ov.setAttribute('aria-hidden', 'false');
