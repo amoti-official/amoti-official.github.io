@@ -4415,6 +4415,27 @@ function recJoin(recs, base) {
   });
   return db;
 }
+function recFieldMerge(x, y) {
+  const tx = Number(x._t || 0), ty = Number(y._t || 0);
+  const fx = x._ft || {}, fy = y._ft || {};
+  const out = {}, ft = {};
+  const keys = new Set(Object.keys(x).concat(Object.keys(y)));
+  keys.forEach(function (f) {
+    if (f === '_t' || f === '_ft') return;
+    const sx = Number(fx[f] !== undefined ? fx[f] : (f in x ? tx : -1));
+    const sy = Number(fy[f] !== undefined ? fy[f] : (f in y ? ty : -1));
+    if (sx <= -1 && sy <= -1) return;
+    let takeX;
+    if (sx > sy) takeX = true;
+    else if (sy > sx) takeX = false;
+    else takeX = (typeof sbCanon === 'function') ? (sbCanon(x[f]) <= sbCanon(y[f])) : true;
+    if (takeX) { if (f in x) out[f] = x[f]; ft[f] = sx; }
+    else { if (f in y) out[f] = y[f]; ft[f] = sy; }
+  });
+  out._t = Math.max(tx, ty);
+  out._ft = ft;
+  return out;
+}
 function recMerge(a, b) {
   const A = recSplit(a), B = recSplit(b);
   const tombs = Object.assign({}, a.tombs || {});
@@ -4427,7 +4448,7 @@ function recMerge(a, b) {
     if (td && td >= Math.max(tx, ty)) return;
     if (x === undefined) { out[k] = y; return; }
     if (y === undefined) { out[k] = x; return; }
-    out[k] = ty > tx ? y : (ty < tx ? x : ((typeof sbCanon === 'function' && sbCanon(y) > sbCanon(x)) ? y : x));
+    out[k] = (typeof recFieldMerge === 'function') ? recFieldMerge(x, y) : (ty > tx ? y : x);
   });
   const t2 = {};
   Object.keys(tombs).forEach(k => { if (!(k in out)) t2[k] = tombs[k]; });
@@ -4439,16 +4460,26 @@ function recStamp() {
   const snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
   const cur = recSplit(DB);
   const t = (typeof sbNow === 'function') ? sbNow() : Date.now();
-  if (typeof sbDigest !== 'function') return;
-  if (snap.__v !== 2) {
-    const s2 = { __v: 2 };
-    Object.keys(cur).forEach(function (k) { s2[k] = sbDigest(cur[k]); });
-    try { localStorage.setItem('amoti_snap', JSON.stringify(s2)); } catch (e) {}
+  if (typeof sbDigest !== 'function' || typeof fieldSnap !== 'function') return;
+  if (snap.__v !== 3) {
+    const s3 = { __v: 3 };
+    Object.keys(cur).forEach(function (k) { s3[k] = fieldSnap(cur[k]); });
+    try { localStorage.setItem('amoti_snap', JSON.stringify(s3)); } catch (e) {}
     return;
   }
   Object.keys(cur).forEach(function (k) {
-    const d = sbDigest(cur[k]);
-    if (snap[k] !== d) { cur[k]._t = t; snap[k] = d; }
+    const r = cur[k], prev = snap[k] || {}, now = fieldSnap(r), first = !r._ft;
+    const ft = r._ft = r._ft || {};
+    if (first) { Object.keys(now).forEach(function (f) { ft[f] = Number(r._t || t); }); }
+    let changed = false;
+    Object.keys(now).forEach(function (f) {
+      if (prev[f] === undefined) { if (first) return; ft[f] = t; changed = true; }
+      else if (prev[f] !== now[f]) { ft[f] = t; changed = true; }
+      else if (ft[f] === undefined) { ft[f] = Number(r._t || t); }
+    });
+    Object.keys(prev).forEach(function (f) { if (!(f in now)) { ft[f] = t; changed = true; } });
+    if (changed) r._t = t;
+    snap[k] = now;
   });
   DB.tombs = DB.tombs || {};
   Object.keys(snap).forEach(function (k) { if (k !== '__v' && !(k in cur)) { DB.tombs[k] = t; delete snap[k]; } });
@@ -4593,6 +4624,7 @@ const SB_URL = 'https://nqvgbejvrpwestkdqvav.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xdmdiZWp2cnB3ZXN0a2RxdmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4OTU2MDMsImV4cCI6MjEwNTQ3MTYwM30.2Sx7PjUMQbYtKunGRIjen_KYSNEMEjd-gRWuUXep5b4';
 const SB_ROW = 'team';
 let _skew = 0;
+let _inSyncAt = 0;
 let _snap2 = null;
 function sbNow() { return Date.now() + _skew; }
 function sbCanon(v) {
@@ -4601,13 +4633,18 @@ function sbCanon(v) {
   const ks = Object.keys(v).sort();
   return '{' + ks.map(function (k) { return JSON.stringify(k) + ':' + sbCanon(v[k]); }).join(',') + '}';
 }
-function sbDigest(r) { const o = Object.assign({}, r); delete o._t; return sbCanon(o); }
+function sbDigest(r) { const o = Object.assign({}, r); delete o._t; delete o._ft; return sbCanon(o); }
+function fieldSnap(r) {
+  const o = {};
+  Object.keys(r).forEach(function (f) { if (f === '_t' || f === '_ft') return; o[f] = sbCanon(r[f]); });
+  return o;
+}
 function sbSyncSnap() {
   const cur = recSplit(DB);
   _snap2 = {};
-  const s2 = { __v: 2 };
-  Object.keys(cur).forEach(function (k) { const d = sbDigest(cur[k]); _snap2[k] = d; s2[k] = d; });
-  try { localStorage.setItem('amoti_snap', JSON.stringify(s2)); } catch (e) {}
+  const s3 = { __v: 3 };
+  Object.keys(cur).forEach(function (k) { _snap2[k] = sbDigest(cur[k]); s3[k] = fieldSnap(cur[k]); });
+  try { localStorage.setItem('amoti_snap', JSON.stringify(s3)); } catch (e) {}
 }
 function sbFixTs(o) {
   const cap = sbNow() + 2000;
@@ -4619,17 +4656,10 @@ function sbFixTs(o) {
     Object.keys(recs).forEach(function (k) { if (recs[k] && recs[k]._t) recs[k]._t = fix(recs[k]._t); });
   } catch (e) {}
 }
-function sbSnapReset() { const cur = recSplit(DB); _snap2 = {}; Object.keys(cur).forEach(function (k) { _snap2[k] = sbDigest(cur[k]); }); }
+function sbSnapReset() { try { sbSyncSnap(); } catch (e) {} }
 function sbStampLocal() {
-  const cur = recSplit(DB);
-  if (_snap2 === null) { sbSnapReset(); return; }
-  const t = sbNow();
-  Object.keys(cur).forEach(function (k) {
-    const d = sbDigest(cur[k]);
-    if (_snap2[k] !== d) { cur[k]._t = t; _snap2[k] = d; }
-  });
-  DB.tombs = DB.tombs || {};
-  Object.keys(_snap2).forEach(function (k) { if (!(k in cur)) { DB.tombs[k] = t; delete _snap2[k]; } });
+  if (typeof recStamp === 'function') { try { recStamp(); } catch (e) {} }
+  try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
 const SB_BUILD = '20260921-0148Z';
@@ -4717,8 +4747,8 @@ function shInfo() {
   if (ap) ap.onclick = function () { sbApplyPending(); };
 }
 async function shSync(manual) {
-  if (_inSync) return;
-  _inSync = true;
+  if (_inSync && (Date.now() - _inSyncAt) < 30000) return;
+  _inSync = true; _inSyncAt = Date.now();
   try {
     try { sbFixTs(DB); sbStampLocal(); } catch (e) {}
     if (manual) shSay('<div class="callout">同期しています…</div>');
@@ -4808,6 +4838,25 @@ setInterval(function () { try { sbCheckUpdate(); } catch (e) {} }, 300000);
 setTimeout(function () { try { sbCheckUpdate(); } catch (e) {} }, 4000);
 window.addEventListener('visibilitychange', function () { if (!document.hidden) { try { shSync(false); } catch (e) {} } });
 sbInit();
+(function sbCatchUp(n) {
+  setTimeout(function () {
+    try { if (!DB.api || !DB.api.sbAt) { shSync(false); } } catch (e) {}
+    if (n < 15) sbCatchUp(n + 1);
+  }, 4000);
+})(0);
+let _wasLogged = null;
+setInterval(function () {
+  try {
+    if (typeof authLoggedIn === 'function') {
+      const v = authLoggedIn();
+      if (_wasLogged === false && v === true) {
+        setTimeout(function () { try { shSync(true); } catch (e) {} }, 200);
+        setTimeout(function () { try { refreshFilterSelects(); render(); } catch (e) {} }, 2500);
+      }
+      _wasLogged = v;
+    }
+  } catch (e) {}
+}, 2000);
 /* === END_AMOTI_SUPABASE === */
 
 go(VIEW_TITLES[h] ? h : 'dash');
