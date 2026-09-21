@@ -1338,6 +1338,15 @@ function normalize(d) {
     if (ST_MAP[c.status]) c.status = ST_MAP[c.status];
     if (STATUSES.indexOf(c.status) < 0) c.status = '進行中';
     c.invoicedAt = c.invoicedAt || '';
+    /* 旧データ移行：c.type（PR案件・モニター等）が GENRES に一致する場合のみ c.genre に移す。
+       PR案件など「案件種別」で GENRES に無い値は誤フォールバックの原因になるため無視する。 */
+    if ((!c.genre || c.genre === '未設定') && c.type && GENRES.indexOf(c.type) >= 0) {
+      c.genre = c.type;
+    }
+    /* c.type は今後使わないので削除（レンダリングフォールバックの誤動作を防ぐ） */
+    if (c.type !== undefined) { try { delete c.type; } catch (e) { c.type = ''; } }
+    if (!c.genre) c.genre = '未設定';
+    if (!c.priceRange) c.priceRange = '未設定';
     return c;
   });
   return d;
@@ -1780,7 +1789,7 @@ function recDetail(c) {
     <div class="rec-grid">
       <div><span class="k">訪問日時</span><b>${esc(c.visitAt ? jDT(c.visitAt) : '未定')}</b></div>
       <div><span class="k">投稿日</span><b>${esc(jYMD(c.date))}</b></div>
-      <div><span class="k">ジャンル</span><b>${esc(c.genre || c.type || '—')}</b></div>
+      <div><span class="k">ジャンル</span><b>${esc((c.genre && c.genre !== '未設定') ? c.genre : '—')}</b></div>
       <div><span class="k">客単価</span><b>${esc(c.priceRange || '—')}</b></div>
       <div><span class="k">報酬額</span><b>${yen(c.reward)}</b></div>
       <div><span class="k">ステータス</span><b>${esc(c.status)}${c.dropped ? '（見送り）' : ''}</b></div>
@@ -1990,7 +1999,7 @@ function renderCampaigns() {
       const flag = c.dropped ? 'var(--cha)' : late ? 'var(--shu)' : c.status === '入金済' ? 'var(--ok)' : c.status === '請求中' ? 'var(--kohaku)' : 'var(--mori-3)';
       return `<tr class="rec ${open ? 'open' : ''}" data-rec="${esc(c.id)}">
         <td><span class="rec-dot" style="background:${flag}" title="${c.dropped ? '見送り' : c.status}"></span></td>
-        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}<div style="font-size:10.5px;font-weight:700;color:var(--mori-3);margin-top:3px;line-height:1.4;font-family:var(--sans);text-align:left">${(c.genre && c.genre !== '未設定') ? esc(c.genre) : (c.type ? esc(c.type) : '<span style="color:var(--cha);font-weight:500">ジャンル未登録</span>')}<br>${(c.priceRange && c.priceRange !== '未設定') ? esc(c.priceRange) : '<span style="color:var(--cha);font-weight:500">客単価未登録</span>'}</div></td>
+        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}<div style="font-size:10.5px;font-weight:700;color:var(--mori-3);margin-top:3px;line-height:1.4;font-family:var(--sans);text-align:left">${(c.genre && c.genre !== '未設定') ? esc(c.genre) : '<span style="color:var(--cha);font-weight:500">ジャンル未登録</span>'}<br>${(c.priceRange && c.priceRange !== '未設定') ? esc(c.priceRange) : '<span style="color:var(--cha);font-weight:500">客単価未登録</span>'}</div></td>
         <td>${campHead(c)}</td>
         <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0" title="${esc(a.name)}">${esc(accLabel(a.name))}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
         <td class="num r">${yen(c.reward)}</td>
@@ -2111,8 +2120,13 @@ function openCamp(id, presetAcc, opts) {
       data.rewards = Object.keys(rewards).length ? rewards : ((c && c.rewards) || {});
       data.accDates = Object.keys(accDates).length ? accDates : ((c && c.accDates) || {});
     }
-    if (c) Object.assign(c, data);
-    else DB.campaigns.push(Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data));
+    if (c) {
+      Object.assign(c, data);
+      /* 旧 c.type が生き残っていると表示にフォールバックしてしまうので確実に消す */
+      if (c.type !== undefined) { try { delete c.type; } catch (e) { c.type = ''; } }
+    } else {
+      DB.campaigns.push(Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data));
+    }
     save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
   };
 }
@@ -2215,7 +2229,7 @@ function invoiceBody(c, accId) {
     <table>
       <thead><tr><th>品名</th><th class="r" style="width:64px">数量</th><th class="r" style="width:120px">単価</th><th class="r" style="width:120px">金額</th></tr></thead>
       <tbody>
-        <tr><td>${esc(c.title || c.client || '（案件名未設定）')}<div style="font-size:10.5px;color:#6B5A62">${esc(c.genre || c.type || '')}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
+        <tr><td>${esc(c.title || c.client || '（案件名未設定）')}<div style="font-size:10.5px;color:#6B5A62">${esc((c.genre && c.genre !== '未設定') ? c.genre : '')}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
           <td class="r">1</td><td class="r">${yen(sub)}</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">小計</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">消費税（${rate}%）</td><td class="r">${yen(tax)}</td></tr>
@@ -2299,7 +2313,7 @@ function invoiceJpeg(c, accId) {
   const IT = 118, SH = 48;
   let ry = ty + HDR;
   txt(c.title || c.client || '（案件名未設定）', TX + 16, ry + 42, 20, '#231018', '700');
-  txt((c.genre || c.type || '') + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
+  txt(((c.genre && c.genre !== '未設定') ? c.genre : '') + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
   if (acc) txt(acc.name, TX + 16, ry + 96, 15, '#6B5A62');
   txt('1', c3 - 30, ry + 58, 19, '#231018', null, null, 'right');
   txt(yen(sub), c4 - 130, ry + 58, 19, '#231018', null, null, 'right');
@@ -3580,7 +3594,7 @@ function renderAccountGenrePrice(accId) {
   const bucket = {};
   posts.forEach(p => {
     const c = campById(p.campaignId); if (!c) return;
-    const g = (c.genre && c.genre !== '未設定') ? c.genre : (c.type || '未登録');
+    const g = (c.genre && c.genre !== '未設定') ? c.genre : '未登録';
     const pr = (c.priceRange && c.priceRange !== '未設定') ? c.priceRange : '未登録';
     const key = g + '\u0000' + pr;
     (bucket[key] = bucket[key] || { g, pr, reach: 0, er: 0, n: 0 });
@@ -4794,7 +4808,7 @@ document.getElementById('btnExportCsv').onclick = () => {
   toast('CSVを書き出しました');
 };
 document.getElementById('btnExportCampCsv').onclick = () => {
-  const rows = DB.campaigns.map(c => [c.date, c.visitAt || '', c.client, campAccNames(c), (c.genre || c.type || ''), (c.priceRange || ''), c.reward, cUnit(c).toFixed(2), c.status, c.invoice ? '発行済' : '未発行', c.note]);
+  const rows = DB.campaigns.map(c => [c.date, c.visitAt || '', c.client, campAccNames(c), ((c.genre && c.genre !== '未設定') ? c.genre : ''), ((c.priceRange && c.priceRange !== '未設定') ? c.priceRange : ''), c.reward, cUnit(c).toFixed(2), c.status, c.invoice ? '発行済' : '未発行', c.note]);
   dl('campaigns-' + ymd(TODAY) + '.csv', toCsv(['投稿日','訪問日時','クライアント','アカウント','ジャンル','客単価','報酬','フォロワー単価','ステータス','請求書','メモ'], rows), 'text/csv');
   toast('CSVを書き出しました');
 };
@@ -4866,7 +4880,7 @@ function buildBrief() {
   L.push('| 投稿日 | クライアント | アカウント | ジャンル | 客単価 | 報酬 | 円/フォロワー | ステータス |');
   L.push('|---|---|---|---|---|---:|---:|---|');
   DB.campaigns.forEach(c => {
-    L.push('| ' + [jYMD(c.date), cell(c.client), cell(campAccNames(c)), cell(c.genre || c.type || ''), cell(c.priceRange || ''), nf(c.reward),
+    L.push('| ' + [jYMD(c.date), cell(c.client), cell(campAccNames(c)), cell((c.genre && c.genre !== '未設定') ? c.genre : ''), cell((c.priceRange && c.priceRange !== '未設定') ? c.priceRange : ''), nf(c.reward),
       cUnit(c).toFixed(2), cell(c.status)].join(' | ') + ' |');
   });
   L.push('');
