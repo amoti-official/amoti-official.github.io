@@ -4427,7 +4427,7 @@ function recMerge(a, b) {
     if (td && td >= Math.max(tx, ty)) return;
     if (x === undefined) { out[k] = y; return; }
     if (y === undefined) { out[k] = x; return; }
-    out[k] = ty > tx ? y : x;
+    out[k] = ty > tx ? y : (ty < tx ? x : ((typeof sbCanon === 'function' && sbCanon(y) > sbCanon(x)) ? y : x));
   });
   const t2 = {};
   Object.keys(tombs).forEach(k => { if (!(k in out)) t2[k] = tombs[k]; });
@@ -4439,14 +4439,19 @@ function recStamp() {
   const snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
   const cur = recSplit(DB);
   const t = (typeof sbNow === 'function') ? sbNow() : Date.now();
-  Object.keys(cur).forEach(k => {
-    const now = JSON.stringify(cur[k]);
-    if (snap[k] !== now) { cur[k]._t = t; snap[k] = JSON.stringify(cur[k]); }
+  if (typeof sbDigest !== 'function') return;
+  if (snap.__v !== 2) {
+    const s2 = { __v: 2 };
+    Object.keys(cur).forEach(function (k) { s2[k] = sbDigest(cur[k]); });
+    try { localStorage.setItem('amoti_snap', JSON.stringify(s2)); } catch (e) {}
+    return;
+  }
+  Object.keys(cur).forEach(function (k) {
+    const d = sbDigest(cur[k]);
+    if (snap[k] !== d) { cur[k]._t = t; snap[k] = d; }
   });
   DB.tombs = DB.tombs || {};
-  let changed = false;
-  Object.keys(snap).forEach(k => { if (!(k in cur)) { DB.tombs[k] = t; delete snap[k]; changed = true; } });
-  if (changed) { Object.keys(cur).forEach(k => { snap[k] = JSON.stringify(cur[k]); }); }
+  Object.keys(snap).forEach(function (k) { if (k !== '__v' && !(k in cur)) { DB.tombs[k] = t; delete snap[k]; } });
   try { localStorage.setItem('amoti_snap', JSON.stringify(snap)); } catch (e) {}
 }
 async function shSync(manual) {
@@ -4590,7 +4595,20 @@ const SB_ROW = 'team';
 let _skew = 0;
 let _snap2 = null;
 function sbNow() { return Date.now() + _skew; }
-function sbDigest(r) { const o = Object.assign({}, r); delete o._t; return JSON.stringify(o); }
+function sbCanon(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(sbCanon).join(',') + ']';
+  const ks = Object.keys(v).sort();
+  return '{' + ks.map(function (k) { return JSON.stringify(k) + ':' + sbCanon(v[k]); }).join(',') + '}';
+}
+function sbDigest(r) { const o = Object.assign({}, r); delete o._t; return sbCanon(o); }
+function sbSyncSnap() {
+  const cur = recSplit(DB);
+  _snap2 = {};
+  const s2 = { __v: 2 };
+  Object.keys(cur).forEach(function (k) { const d = sbDigest(cur[k]); _snap2[k] = d; s2[k] = d; });
+  try { localStorage.setItem('amoti_snap', JSON.stringify(s2)); } catch (e) {}
+}
 function sbFixTs(o) {
   const cap = sbNow() + 2000;
   const floor = sbNow() - 60000;
@@ -4694,7 +4712,7 @@ function shInfo() {
   const pend = c.sbPending ? ('<div class="callout warn">他の人の更新を取り込み済みです（入力中だったため表示を保留しています）。<button type="button" class="btn ghost" id="shApply" style="margin-left:8px">表示を更新</button></div>') : '';
   shSay('<div class="callout' + (c.sbErr ? ' warn' : '') + '"><b>' + ts + '</b>（同期エンジン ' + SB_VER + '）' +
     '<br>この端末：アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '件' +
-    '<br>サーバー：' + srv + '</div>' + bad + pend);
+    '<br>サーバー：' + srv + '（取り込み差分 ' + ((c.sbIn === undefined) ? '—' : (c.sbIn + '件')) + '）</div>' + bad + pend);
   const ap = document.getElementById('shApply');
   if (ap) ap.onclick = function () { sbApplyPending(); };
 }
@@ -4716,10 +4734,16 @@ async function shSync(manual) {
       _inSync = false; return;
     }
     let db = DB, got = 0;
+    try {
+      const lrecs = recSplit(db), rrecs = recSplit(remote || {});
+      let inc = 0;
+      Object.keys(rrecs).forEach(function (k) { if (lrecs[k] === undefined || sbDigest(lrecs[k]) !== sbDigest(rrecs[k])) inc++; });
+      DB.api.sbIn = inc;
+    } catch (e) {}
     if (remote) {
-      const before = JSON.stringify(recSplit(db));
+      const before = sbCanon(recSplit(db));
       db = recMerge(db, remote);
-      if (JSON.stringify(recSplit(db)) !== before) got = 1;
+      if (sbCanon(recSplit(db)) !== before) got = 1;
     }
     const payload = Object.assign({}, db, { api: {} });
     const body = JSON.stringify(payload);
@@ -4735,7 +4759,7 @@ async function shSync(manual) {
       const keepApi = DB.api;
       db.api = keepApi; db.auth = DB.auth; db.savedAt = DB.savedAt;
       DB = normalize(db);
-      recStamp();
+      try { sbSyncSnap(); } catch (e) {}
       saveLocal();
       if (sbBusy()) {
         DB.api.sbPending = Date.now();
