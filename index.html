@@ -3974,6 +3974,67 @@ function packCampCards() {
     card.dataset.packed = '1';
   });
 }
+/* 要対応の件数があるときは「要対応」ボタンにベルを表示 */
+function updateAlertNav() {
+  let n = 0;
+  try { n = dashAlerts().length; } catch (e) { n = 0; }
+  document.querySelectorAll('.nav-btn[data-view="alerts"]').forEach(b => {
+    const lb = b.querySelector('.lb');
+    if (n > 0) {
+      if (lb) lb.textContent = '🔔 要対応';
+      b.setAttribute('data-m', '🔔要対応');
+      b.setAttribute('data-s', '🔔対応');
+      b.classList.add('has-alert');
+    } else {
+      if (lb) lb.textContent = '要対応';
+      b.setAttribute('data-m', '要対応');
+      b.setAttribute('data-s', '対応');
+      b.classList.remove('has-alert');
+    }
+  });
+}
+/* 要対応のスマホカードを案件管理カードと同じ2行構成に整える */
+function packAlertCards() {
+  if (!MQ_MOBILE()) return;
+  document.querySelectorAll('#dashAlerts .mcards .mcard').forEach(card => {
+    if (card.dataset.packed === '1') return;
+    const camp = card.dataset.openCamp ? campById(card.dataset.openCamp) : null;
+    const head = card.querySelector('.mcard-h');
+    if (!head) return;
+    const live = () => [...card.children].filter(el => el.classList.contains('mcard-r'));
+    const pick = re => { for (const r of live()) { const k = r.querySelector('.k'); if (k && re.test(k.textContent || '')) return r; } return null; };
+    const rCli = pick(/クライアント|店舗/), rAcc = pick(/アカウント/), rRew = pick(/報酬/), rPost = pick(/投稿日/), rSt = pick(/ステータス/);
+    const hd = document.createElement('span'); hd.className = 'hd';
+    if (camp) hd.setAttribute('data-open-camp', esc(camp.id));
+    while (head.firstChild) hd.appendChild(head.firstChild);
+    head.appendChild(hd);
+    if (camp) {
+      const acts = document.createElement('span'); acts.className = 'acts';
+      acts.innerHTML = `<div class="st-seg" data-st="${esc(camp.id)}">` + STATUSES.map(x => {
+        const on = x === camp.status;
+        return `<button type="button" class="st-opt${on ? ' on' : ''}" data-set-st="${esc(x)}"` +
+          `${on ? ` style="background:${ST_COLOR[x]};border-color:${ST_COLOR[x]};color:${ST_FG[x] || '#fff'}"` : ''}>${esc(x)}</button>`;
+      }).join('') + `</div>`
+        + `<button class="btn sm" data-inv="${esc(camp.id)}">${camp.invoice ? '請求書 再発行' : '請求書発行'}</button>`;
+      head.appendChild(acts);
+    }
+    if (rCli) { rCli.classList.add('name-row'); const k = rCli.querySelector('.k'); if (k) k.remove(); const v = rCli.querySelector('.v'); if (v) { v.style.textAlign = 'left'; v.classList.add('tx'); } }
+    if (rSt) rSt.remove();
+    if (rAcc) rAcc.classList.add('stk');
+    if (rRew && rPost) {
+      const two = document.createElement('div'); two.className = 'mcard-r two';
+      [[rRew, '報酬額'], [rPost, '投稿日']].forEach(([r, lab]) => {
+        const pair = document.createElement('span'); pair.className = 'pair';
+        const k = document.createElement('span'); k.className = 'k'; k.textContent = lab;
+        const v = r.querySelector('.v'); if (v) v.style.textAlign = 'left';
+        pair.appendChild(k); if (v) pair.appendChild(v);
+        two.appendChild(pair);
+      });
+      card.appendChild(two); rRew.remove(); rPost.remove();
+    }
+    card.dataset.packed = '1';
+  });
+}
 let lastMQ = MQ_MOBILE(), mqTimer;
 window.addEventListener('resize', () => {
   clearTimeout(mqTimer);
@@ -3999,6 +4060,8 @@ function render() {
     '最終更新 ' + TODAY.getFullYear() + '.' + String(TODAY.getMonth()+1).padStart(2,'0') + '.' + String(TODAY.getDate()).padStart(2,'0');
   applyMobileTables();
   packCampCards();
+  packAlertCards();
+  updateAlertNav();
 }
 function fillSelect(el, items, allLabel) {
   el.innerHTML = `<option value="">${esc(allLabel)}</option>` + items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
@@ -5081,7 +5144,19 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .pacc-h .pair{display:inline-flex;gap:5px;align-items:baseline}
   #view-campaigns .pacc-h b{font-family:var(--mono);font-size:12.5px}
   #view-campaigns .pacc .mcard-r{padding:1.5px 0}
+  #view-alerts .mcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px}
+  #view-alerts .mcard-h .hd{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;flex:1 1 100%;cursor:pointer}
+  #view-alerts .mcard-h .acts{width:100%;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;align-items:center}
+  #view-alerts .mcard-h .acts .st-opt{padding:3px 8px;font-size:10.5px;min-height:26px;font-weight:800}
+  #view-alerts .mcard-h .acts .btn{padding:3px 9px;font-size:10.5px;min-height:26px}
+  #view-alerts .mcard-r.name-row{padding-top:1px}
+  #view-alerts .mcard-r.name-row .v{text-align:left;font-family:var(--sans);font-weight:900;font-size:13px;color:var(--mori)}
+  #view-alerts .mcard-r.stk{display:block}
+  #view-alerts .mcard-r.stk .v{display:block;text-align:left;margin-top:2px}
+  #view-alerts .mcard-r.two{justify-content:flex-start;gap:14px;flex-wrap:wrap}
+  #view-alerts .mcard-r.two .pair{display:inline-flex;gap:6px;align-items:baseline}
 }
+.nav-btn.has-alert .lb{color:var(--kohaku)}
 .per-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 0;border-top:1px dashed var(--line)}
 .per-row:first-child{border-top:0}
 .per-row .an{font-size:11.5px;font-weight:800;flex:1 1 100%}
