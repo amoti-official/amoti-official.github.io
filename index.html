@@ -4503,6 +4503,7 @@ function saveLocal() {
 }
 function shSyncSoon() {
   if (!shReady() || _inSync || window.__PV) return;
+  try { DB.api = DB.api || {}; DB.api.sbLocal = Date.now(); } catch (e) {}
   if (_shT) clearTimeout(_shT);
   _shT = setTimeout(() => { shSync(false); }, 1500);
 }
@@ -4630,11 +4631,24 @@ async function sbCheckUpdate() {
     const m = t.match(/SB_BUILD = '([^']+)'/);
     if (!m || m[1] === SB_BUILD) return;
     if (sbBusy()) return;
+    if (_inSync) return;
+    const lc = Number((DB.api || {}).sbLocal || 0);
+    if (lc && (Date.now() - lc) < 30000) return;
     const last = Number(sessionStorage.getItem('sbReload') || 0);
     if (Date.now() - last < 60000) return;
     sessionStorage.setItem('sbReload', String(Date.now()));
-    await fetch(location.pathname, { cache: 'reload' });
+    try { _lastPushed = ''; await shSync(true); } catch (e) {}
+    try { await fetch(location.pathname, { cache: 'reload' }); } catch (e) {}
     location.reload();
+  } catch (e) {}
+}
+function sbCap(o, anchor) {
+  const cap = anchor + 600000;
+  const fix = function (v) { const n = Number(v) || 0; return n > cap ? cap : n; };
+  try {
+    if (o.tombs) Object.keys(o.tombs).forEach(function (k) { o.tombs[k] = fix(o.tombs[k]); });
+    const recs = recSplit(o);
+    Object.keys(recs).forEach(function (k) { if (recs[k] && recs[k]._t) recs[k]._t = fix(recs[k]._t); });
   } catch (e) {}
 }
 function sbBusy() {
@@ -4675,6 +4689,7 @@ async function shSync(manual) {
     try {
       const row = await sbLoadState();
       remote = (row && row.state) ? row.state : null;
+      if (remote) { const _at = Number(Date.parse((row && row.updated_at) || '')) || Date.now(); sbCap(remote, _at); }
       srvCount = { a: ((remote && remote.accounts) || []).length, c: ((remote && remote.campaigns) || []).length, p: ((remote && remote.posts) || []).length };
     } catch (e) {
       DB.api.sbErr = 'サーバーに接続できません（' + String((e && e.message) || e) + '）';
@@ -4683,19 +4698,6 @@ async function shSync(manual) {
     }
     let db = DB, got = 0;
     if (remote) {
-      const rset = recSplit(remote);
-      const lastMs = Number((DB.api || {}).sbMs || 0);
-      const recs = recSplit(DB);
-      let removed = 0;
-      Object.keys(recs).forEach(k => {
-        if (rset[k] === undefined && Number((recs[k] && recs[k]._t) || 0) < lastMs) {
-          delete recs[k];
-          DB.tombs = DB.tombs || {};
-          DB.tombs[k] = Date.now();
-          removed++;
-        }
-      });
-      if (removed) db = recJoin(recs, DB);
       const before = JSON.stringify(recSplit(db));
       db = recMerge(db, remote);
       if (JSON.stringify(recSplit(db)) !== before) got = 1;
