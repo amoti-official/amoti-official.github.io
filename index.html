@@ -1199,7 +1199,9 @@ window.addEventListener('error', function (e) {
 /* ---------- 定数 ---------- */
 const PLATFORMS = ['Instagram','TikTok','YouTube','X','Threads'];
 const STATUSES  = ['進行中','請求中','入金済'];
-const TYPES     = ['PR案件','モニター','タイアップ','アフィリエイト','自主'];
+const TYPES     = ['PR案件','モニター','タイアップ','アフィリエイト','自主']; /* legacy: 表示用のみ */
+const GENRES    = ['未設定','和食','洋食','焼鳥','焼肉','中華','寿司','イタリアン','フレンチ','カフェ','ラーメン','居酒屋','バル','ホテル','その他'];
+const PRICE_RANGES = ['未設定','〜1,999円','2,000円〜3,999円','4,000円〜5,999円','6,000円〜7,999円','8,000円〜9,999円','10,000円以上'];
 const FORMATS   = ['リール','フィード','カルーセル','ストーリーズ','TikTok'];
 const STATUS_CLS = {'進行中':'st-kaku','請求中':'st-bill','入金済':'st-paid'};
 const TYPE_CLS  = {'PR案件':'pr','モニター':'mon','タイアップ':'pr','アフィリエイト':'aff','自主':''};
@@ -1728,6 +1730,8 @@ function recDetail(c) {
     <div class="rec-grid">
       <div><span class="k">訪問日時</span><b>${esc(c.visitAt ? jDT(c.visitAt) : '未定')}</b></div>
       <div><span class="k">投稿日</span><b>${esc(jYMD(c.date))}</b></div>
+      <div><span class="k">ジャンル</span><b>${esc(c.genre || c.type || '—')}</b></div>
+      <div><span class="k">客単価</span><b>${esc(c.priceRange || '—')}</b></div>
       <div><span class="k">報酬額</span><b>${yen(c.reward)}</b></div>
       <div><span class="k">ステータス</span><b>${esc(c.status)}${c.dropped ? '（見送り）' : ''}</b></div>
       <div><span class="k">単価の目安</span><b>${yen(campFollowers(c) * 2)}〜${yen(campFollowers(c) * 4)}</b></div>
@@ -1956,11 +1960,16 @@ function renderCampaigns() {
       } catch (e) { return `<tr class="rec"><td colspan="9" style="color:var(--shu);font-size:12px;padding:10px">この案件の表示でエラーが発生しました：${esc(String((e && e.message) || e))}（データは消えていません。この行をコピーしてご連絡ください）</td></tr>`; }
     }).join('')}</tbody></table>`;
 }
-function campForm(c, presetAcc) {
+function campForm(c, presetAcc, opts) {
+  opts = opts || {};
+  const defaultVisit = opts.visitDate ? (opts.visitDate + 'T12:00') : '';
+  const defaultDate = opts.visitDate || ymd(TODAY);
   const blank = { id: '', client: '', title: '', accountIds: presetAcc ? [presetAcc] : (DB.accounts[0] ? [DB.accounts[0].id] : []),
-    type: 'PR案件', reward: '', status: '進行中', date: ymd(TODAY), visitAt: '', pr: true, prSet: false,
+    genre: '未設定', priceRange: '未設定', reward: '', status: '進行中', date: defaultDate, visitAt: defaultVisit, pr: true, prSet: false,
     invoice: '', invoicedAt: '', payTerm: 30, note: '', dropped: false };
   const d = Object.assign({}, blank, c || {});
+  /* 旧データ互換：type を genre に自動移行（保存はしないが表示は綺麗に） */
+  if (!c) { /* new form: keep defaults */ }
   const ids = Array.isArray(d.accountIds) ? d.accountIds : [];
   return `<form id="campForm" class="fgrid">
     <div class="field wide"><label>クライアント / 店舗名 *</label><input name="client" required value="${esc(d.client)}" placeholder="株式会社◯◯ / ◯◯食堂"></div>
@@ -1968,10 +1977,11 @@ function campForm(c, presetAcc) {
       <div class="ins-acc">${DB.accounts.map(a => `<label><input type="checkbox" name="accountIds" value="${esc(a.id)}" ${ids.indexOf(a.id) >= 0 ? 'checked' : ''}><span class="an">${esc(accLabel(a.name))}</span><span class="am">${esc(a.platform)} / ${wan(a.followers)}</span></label>`).join('') || '<span style="font-size:12px;color:var(--cha)">アカウントが未登録です</span>'}</div></div>
     <div class="field"><label>訪問日時（撮影・試食）</label><input name="visitAt" type="datetime-local" value="${esc(d.visitAt || '')}"></div>
     <div class="field"><label>投稿日 / 投稿予定日</label><input name="date" type="date" value="${esc(d.date)}"></div>
+    <div class="field"><label>ジャンル</label><select name="genre">${GENRES.map(g => `<option ${g === (d.genre || '未設定') ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></div>
+    <div class="field"><label>客単価</label><select name="priceRange">${PRICE_RANGES.map(p => `<option ${p === (d.priceRange || '未設定') ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
     <div class="field"><label>報酬額（税込・円）</label><input name="reward" type="number" min="0" step="1000" value="${esc(d.reward)}"></div>
     <div class="field wide" id="cfPerAcc" hidden></div>
     <div class="field"><label>ステータス</label><select name="status">${STATUSES.map(x => `<option ${x === d.status ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
-    <div class="field"><label>種別</label><select name="type">${TYPES.map(t => `<option ${t === d.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
     <div class="field wide"><label>メモ</label><textarea name="note" placeholder="条件・二次利用・NG事項など">${esc(d.note)}</textarea></div>
     <div class="field wide"><div class="callout" id="cfUnit"></div></div>
     <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
@@ -1981,9 +1991,9 @@ function campForm(c, presetAcc) {
     </div>
   </form>`;
 }
-function openCamp(id, presetAcc) {
+function openCamp(id, presetAcc, opts) {
   const c = id ? campById(id) : null;
-  openModal(c ? '案件を編集' : '案件を登録', campForm(c, presetAcc));
+  openModal(c ? '案件を編集' : '案件を登録', campForm(c, presetAcc, opts));
   const form = document.getElementById('campForm');
   if (!form) return;
   const perBox = document.getElementById('cfPerAcc');
@@ -2042,7 +2052,8 @@ function openCamp(id, presetAcc) {
     const firstDate = Object.keys(accDates).map(k => accDates[k]).sort()[0];
     const data = {
       client: v('client').trim(), accountIds,
-      type: v('type'), reward: multi ? (filled ? sumRw : ((c && c.reward) || Number(v('reward')) || 0)) : (Number(v('reward')) || 0), status: v('status'),
+      genre: v('genre'), priceRange: v('priceRange'),
+      reward: multi ? (filled ? sumRw : ((c && c.reward) || Number(v('reward')) || 0)) : (Number(v('reward')) || 0), status: v('status'),
       date: (multi && firstDate) ? firstDate : v('date'), visitAt: v('visitAt'),
       note: v('note').trim()
     };
@@ -2154,7 +2165,7 @@ function invoiceBody(c, accId) {
     <table>
       <thead><tr><th>品名</th><th class="r" style="width:64px">数量</th><th class="r" style="width:120px">単価</th><th class="r" style="width:120px">金額</th></tr></thead>
       <tbody>
-        <tr><td>${esc(c.title || c.client || '（案件名未設定）')}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type || '')}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
+        <tr><td>${esc(c.title || c.client || '（案件名未設定）')}<div style="font-size:10.5px;color:#6B5A62">${esc(c.genre || c.type || '')}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
           <td class="r">1</td><td class="r">${yen(sub)}</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">小計</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">消費税（${rate}%）</td><td class="r">${yen(tax)}</td></tr>
@@ -2238,7 +2249,7 @@ function invoiceJpeg(c, accId) {
   const IT = 118, SH = 48;
   let ry = ty + HDR;
   txt(c.title || c.client || '（案件名未設定）', TX + 16, ry + 42, 20, '#231018', '700');
-  txt((c.type || '') + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
+  txt((c.genre || c.type || '') + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
   if (acc) txt(acc.name, TX + 16, ry + 96, 15, '#6B5A62');
   txt('1', c3 - 30, ry + 58, 19, '#231018', null, null, 'right');
   txt(yen(sub), c4 - 130, ry + 58, 19, '#231018', null, null, 'right');
@@ -3446,10 +3457,14 @@ function renderSchedule() {
       <h2>${sd.getMonth() + 1}/${sd.getDate()}（${['日','月','火','水','木','金','土'][sd.getDay()]}）の予定</h2>
       <span class="hint" style="margin-left:0">アカウント名 / 訪問時間</span>
       <span class="hint">${r.t} · ${dayList.length}件</span>
+      <button type="button" class="btn sm primary" id="schedAddCamp" data-add-camp-day="${esc(calSelected)}" style="margin-left:auto">＋ 案件登録</button>
     </div>
     <div class="card-b">${dayList.length ? dayList.map(schRow).join('')
       : `<div class="callout">この日の予定はありません。案件の「訪問日時」を登録すると、カレンダーとここに表示されます。</div>`}</div>
   </div>`;
+  /* ＋ 案件登録：選択中の日付を訪問日時に自動プリセット */
+  const _addBtn = document.getElementById('schedAddCamp');
+  if (_addBtn) _addBtn.onclick = () => openCamp(null, null, { visitDate: calSelected });
 }
 
 /* =========================================================================
@@ -4670,8 +4685,8 @@ document.getElementById('btnExportCsv').onclick = () => {
   toast('CSVを書き出しました');
 };
 document.getElementById('btnExportCampCsv').onclick = () => {
-  const rows = DB.campaigns.map(c => [c.date, c.visitAt || '', c.client, campAccNames(c), c.type, c.reward, cUnit(c).toFixed(2), c.status, c.invoice ? '発行済' : '未発行', c.note]);
-  dl('campaigns-' + ymd(TODAY) + '.csv', toCsv(['投稿日','訪問日時','クライアント','アカウント','種別','報酬','フォロワー単価','ステータス','請求書','メモ'], rows), 'text/csv');
+  const rows = DB.campaigns.map(c => [c.date, c.visitAt || '', c.client, campAccNames(c), (c.genre || c.type || ''), (c.priceRange || ''), c.reward, cUnit(c).toFixed(2), c.status, c.invoice ? '発行済' : '未発行', c.note]);
+  dl('campaigns-' + ymd(TODAY) + '.csv', toCsv(['投稿日','訪問日時','クライアント','アカウント','ジャンル','客単価','報酬','フォロワー単価','ステータス','請求書','メモ'], rows), 'text/csv');
   toast('CSVを書き出しました');
 };
 document.getElementById('fileImport').addEventListener('change', e => {
@@ -4739,10 +4754,10 @@ function buildBrief() {
     + ' ／ 入金済 ' + yen(DB.campaigns.filter(c => c.status === '入金済').reduce((s, c) => s + (Number(c.reward) || 0), 0))
     + ' ／ 未入金 ' + yen(DB.campaigns.filter(c => ['投稿済', '請求済'].includes(c.status)).reduce((s, c) => s + (Number(c.reward) || 0), 0)));
   L.push('');
-  L.push('| 投稿日 | クライアント | アカウント | 種別 | 報酬 | 円/フォロワー | ステータス |');
-  L.push('|---|---|---|---|---:|---:|---|');
+  L.push('| 投稿日 | クライアント | アカウント | ジャンル | 客単価 | 報酬 | 円/フォロワー | ステータス |');
+  L.push('|---|---|---|---|---|---:|---:|---|');
   DB.campaigns.forEach(c => {
-    L.push('| ' + [jYMD(c.date), cell(c.client), cell(campAccNames(c)), cell(c.type), nf(c.reward),
+    L.push('| ' + [jYMD(c.date), cell(c.client), cell(campAccNames(c)), cell(c.genre || c.type || ''), cell(c.priceRange || ''), nf(c.reward),
       cUnit(c).toFixed(2), cell(c.status)].join(' | ') + ' |');
   });
   L.push('');
