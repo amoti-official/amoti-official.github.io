@@ -1009,18 +1009,7 @@ html{zoom:.7}
 
     <!-- ---------- 05 トレンド ---------- -->
     <section class="view" id="view-trends" hidden>
-      <div class="sec-title"><h2>SNS仕様変更（2026年）</h2>
-        <span class="note">出典リンク付き・随時更新して使ってください</span>
-      </div>
-      <div class="card ai-scan" id="trendScanBar" style="margin-bottom:14px">
-        <div class="card-b" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px">
-          <span style="font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mori-3);background:var(--mori-pale);padding:3px 8px;border-radius:999px">🤖 AI トレンドレポート</span>
-          <span id="trendScanStatus" style="font-size:12.5px;color:var(--cha);flex:1;min-width:180px"></span>
-        </div>
-        <div style="padding:0 14px 12px;font-size:10.5px;color:var(--cha);line-height:1.6">
-          Genspark Workflows が毎朝8時（JST）にWeb検索でSNS仕様変更を収集し、Supabase に保存 → このアプリを開くと自動で読み込みます。
-        </div>
-      </div>
+      <div class="sec-title"><h2>SNS仕様変更</h2></div>
       <div class="callout" id="trendConclusion" style="margin-bottom:18px"></div>
       <div class="trend-tabs" id="trendTabs"></div>
       <div class="split">
@@ -1533,7 +1522,7 @@ const VIEW_TITLES = {
   schedule:  ['スケジュール', '訪問予定と投稿予定をカレンダーで確認'],
   accounts:  ['アカウント一覧', '複数アカウントの資産を俯瞰'],
   insights:  ['投稿インサイト', 'どの投稿が効いたかを数字で'],
-  trends:    ['トレンド・仕様変更', '2026年のSNS仕様と企画ネタ'],
+  trends:    ['トレンド・仕様変更', 'SNS仕様と企画ネタ'],
   admin:     ['管理情報', 'ログイン情報と振込口座']
 };
 function go(view) {
@@ -3767,16 +3756,6 @@ const trendPlat = n => {
   return '';
 };
 function renderTrends() {
-  /* AI分析ステータスバー */
-  try {
-    const st = document.getElementById('trendScanStatus');
-    if (st) {
-      const latest = newsLatestDate();
-      const scannedAt = (DB.trends && DB.trends.aiScannedAt) || (DB.trends && DB.trends.scannedAt) || '';
-      const scanFmt = scannedAt ? new Date(scannedAt).toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '未実行';
-      st.innerHTML = '最終取得：<b>' + esc(scanFmt) + '</b>　／　最新記事：<b>' + esc(latest || '—') + '</b>　（記事数 ' + (NEWS || []).length + ' 件）';
-    }
-  } catch (e) {}
   /* 運用の結論：SNSタブに応じて内容を切り替え */
   try {
     const cc = document.getElementById('trendConclusion');
