@@ -1490,6 +1490,13 @@ function toast(msg) {
 }
 
 /* ---------- モーダル ---------- */
+/* アカウント指定つきの請求書ボタン（キャプチャ段階で処理して旧ハンドラを止める） */
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-inv-acc]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  openInvoice(b.dataset.inv, b.dataset.invAcc);
+}, true);
 function openModal(title, html) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = html;
@@ -1614,10 +1621,13 @@ function dashAlerts() {
         msg: `投稿予定日を ${late} 日過ぎています（投稿ログが未登録）`,
         hint: '投稿済みならインサイト画像を取り込むか、投稿ログを登録してください' });
     }
-    if (c.status !== '入金済' && !c.invoice && (posted || (d && d <= TODAY))) {
+    const pend = pendingInvAccs(c);
+    if (c.status !== '入金済' && pend.length && (posted || (d && d <= TODAY))) {
       const late = d ? ddiff(c.date, t) : 0;
+      const done = invIssuedAccs(c).length;
       out.push({ sev: (posted || late > 7) ? 'high' : 'mid', camp: c, kind: '未請求',
-        msg: '請求書が未発行です', hint: `${yen(c.reward)}` });
+        msg: done ? `請求書が未発行のアカウントがあります（${done}/${campAccs(c).length} 発行済）` : '請求書が未発行です',
+        hint: pend.map(a => accLabel(a.name) + ' ' + yen(accReward(c, a.id))).join('／') });
     }
     if (c.status === '請求中') {
       const base = parseD(c.invoicedAt) || d;
@@ -1627,7 +1637,7 @@ function dashAlerts() {
       out.push({ sev: over > 5 ? 'high' : days >= term - 5 ? 'mid' : 'low', camp: c, kind: '未入金',
         msg: over > 5 ? `支払期限を ${over} 日過ぎても入金が確認できていません`
           : days >= term - 5 ? 'まもなく支払期限です（入金未確認）' : '入金がまだ確認できていません',
-        hint: `${c.invoice ? '請求書 発行済' : '請求書 未発行'}` });
+        hint: `請求書 ${invLabel(c)}` });
     }
   });
   const kOrd = { '未投稿': 0, '未請求': 1, '未入金': 2 };
@@ -1728,7 +1738,7 @@ function recDetail(c) {
     <div class="inline">
       <button class="btn sm" data-open-camp="${esc(c.id)}">編集</button>
       <button class="btn sm" data-ins-camp="${esc(c.id)}">＋ インサイト画像</button>
-      <button class="btn sm" data-inv="${esc(c.id)}">${c.invoice ? '請求書を開く（再発行・印刷）' : '請求書を発行'}</button>
+      ${campAccs(c).map(a => { const iv2 = invOf(c, a.id); return `<button class="btn sm" data-inv="${esc(c.id)}" data-inv-acc="${esc(a.id)}">${iv2 ? '請求書（再発行・印刷）' : '請求書を発行'}｜${esc(accLabel(a.name))} ${yen(accReward(c, a.id))}</button>`; }).join('')}
       <button class="btn sm ghost" data-dup-camp="${esc(c.id)}">複製</button>
       <button class="btn sm ghost" data-drop-camp="${esc(c.id)}">${c.dropped ? '見送りから戻す' : '見送りにする'}</button>
       <button class="btn sm ghost" data-del-camp="${esc(c.id)}">削除</button>
@@ -2039,13 +2049,65 @@ function openCamp(id, presetAcc) {
 function nextInvoiceNo(base) {
   const d = (base instanceof Date && !isNaN(base)) ? base : TODAY;
   const pre = 'INV-' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + '-';
-  const n = DB.campaigns.filter(x => x.invoice && x.invoice.indexOf(pre) === 0).length + 1;
-  return pre + String(n).padStart(2, '0');
+  let n = 0;
+  DB.campaigns.forEach(x => invNumbers(x).forEach(no => { if (no.indexOf(pre) === 0) n++; }));
+  return pre + String(n + 1).padStart(2, '0');
+}
+/* ---- 請求書はアカウント単位（c.invoices[accId] = {no, issuedAt, history[]}） ---- */
+function invOf(c, accId) {
+  const o = c.invoices || {};
+  return (o[accId] && o[accId].no) ? o[accId] : null;
+}
+function invIssuedAccs(c) { return campAccs(c).filter(a => invOf(c, a.id)); }
+function pendingInvAccs(c) { return campAccs(c).filter(a => !invOf(c, a.id)); }
+function accReward(c, accId) {
+  if (c.rewards && c.rewards[accId] !== undefined && c.rewards[accId] !== null && c.rewards[accId] !== '') return Number(c.rewards[accId]) || 0;
+  const ids = campAccs(c);
+  if (ids.length <= 1) return Number(c.reward) || 0;
+  return Math.round((Number(c.reward) || 0) / Math.max(1, ids.length));
+}
+function invNumbers(c) {
+  const out = [];
+  if (c.invoice) out.push(c.invoice);
+  Object.keys(c.invoices || {}).forEach(k => { if (c.invoices[k] && c.invoices[k].no) out.push(c.invoices[k].no); });
+  return out.filter((v, i, a) => v && a.indexOf(v) === i);
+}
+function syncInvoiceAgg(c) {
+  const iss = invIssuedAccs(c);
+  const last = iss.length ? invOf(c, iss[iss.length - 1].id) : null;
+  c.invoice = last ? last.no : '';
+  c.invoicedAt = last ? (last.issuedAt || '') : '';
+  return c;
+}
+function invLabel(c) {
+  const n = campAccs(c).length;
+  if (n <= 1) return c.invoice || '未発行';
+  const done = invIssuedAccs(c).length;
+  return done ? done + '/' + n + ' 発行済' : '未発行';
+}
+let _invMig = false;
+function migrateInvoices() {
+  DB.campaigns.forEach(c => {
+    c.invoices = c.invoices || {};
+    if (c.invoice && !Object.keys(c.invoices).length) {
+      const a = campAccs(c)[0];
+      if (a) {
+        c.invoices[a.id] = { no: c.invoice, issuedAt: c.invoicedAt || '', history: (c.invoiceHistory || []).slice() };
+        c.invoiceHistory = [];
+      }
+    }
+    syncInvoiceAgg(c);
+  });
 }
 function jDate(dt) { return dt.getFullYear() + '年' + (dt.getMonth() + 1) + '月' + dt.getDate() + '日'; }
-function invoiceBody(c) {
+function invoiceBody(c, accId) {
   const p = DB.profile || {};
-  const total = Number(c.reward) || 0;
+  const _accs = campAccs(c);
+  const acc = (accId ? _accs.find(a => a.id === accId) : null) || _accs[0] || null;
+  const iv = acc ? invOf(c, acc.id) : null;
+  const no = iv ? iv.no : '';
+  const hist = (iv && iv.history) || [];
+  const total = acc ? accReward(c, acc.id) : Number(c.reward) || 0;
   const rate = Number(p.tax) || 0;
   const sub = rate ? Math.round(total / (1 + rate / 100)) : total;
   const tax = total - sub;
@@ -2054,11 +2116,12 @@ function invoiceBody(c) {
   return `<div class="inv-sheet">
     <div class="inv-meta">
       <div><h1>請求書</h1><div style="font-size:11px;color:#6B5A62;letter-spacing:.2em">INVOICE</div>
-        ${(c.invoiceHistory || []).length ? '<div style="display:inline-block;margin-top:7px;padding:2px 9px;border:1px solid #F84060;color:#F84060;font-size:10.5px;font-weight:700;border-radius:3px;letter-spacing:.08em">再発行</div>' : ''}</div>
+        ${hist.length ? '<div style="display:inline-block;margin-top:7px;padding:2px 9px;border:1px solid #F84060;color:#F84060;font-size:10.5px;font-weight:700;border-radius:3px;letter-spacing:.08em">再発行</div>' : ''}</div>
       <div style="text-align:right;font-size:11.5px">
-        <div>請求書番号 <b>${esc(c.invoice || nextInvoiceNo(parseD(c.date) || TODAY))}</b></div>
+        <div>請求書番号 <b>${esc(no || nextInvoiceNo(parseD(c.date) || TODAY))}</b></div>
+        ${acc ? `<div style="font-size:10.5px;color:#6B5A62">対象：${esc(acc.name)}</div>` : ''}
         <div>発行日 ${esc(jDate(issued))}</div>
-        ${(c.invoiceHistory || []).length ? `<div style="font-size:10.5px;color:#6B5A62">旧番号 ${esc(c.invoiceHistory.map(h => h.no).join(' / '))}</div>` : ''}
+        ${hist.length ? `<div style="font-size:10.5px;color:#6B5A62">旧番号 ${esc(hist.map(h => h.no).join(' / '))}</div>` : ''}
         ${p.regNo ? `<div>登録番号 ${esc(p.regNo)}</div>` : ''}
       </div>
     </div>
@@ -2076,11 +2139,11 @@ function invoiceBody(c) {
         ${p.email ? `<div>${esc(p.email)}</div>` : ''}
       </div>
     </div>
-    <div class="inv-total"><span style="font-size:12.5px">ご請求金額（税込）</span><b>${yen(total)}</b></div>
+    <div class="inv-total"><span style="font-size:12.5px">ご請求金額（税込）${acc ? '<span style="color:#6B5A62">（' + esc(acc.name) + ' 分）</span>' : ''}</span><b>${yen(total)}</b></div>
     <table>
       <thead><tr><th>品名</th><th class="r" style="width:64px">数量</th><th class="r" style="width:120px">単価</th><th class="r" style="width:120px">金額</th></tr></thead>
       <tbody>
-        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${campAccNames(c) ? ' / ' + esc(campAccNames(c)) : ''}</div></td>
+        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
           <td class="r">1</td><td class="r">${yen(sub)}</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">小計</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">消費税（${rate}%）</td><td class="r">${yen(tax)}</td></tr>
@@ -2103,6 +2166,106 @@ const INV_CSS = 'body{margin:0;padding:26px;font-family:"Hiragino Kaku Gothic Pr
   + '.inv-meta{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:16px}'
   + '.inv-total{margin:12px 0;padding:12px 14px;background:#FBF4F2;border-radius:7px;display:flex;justify-content:space-between;align-items:baseline}'
   + '.inv-total b{font-family:ui-monospace,Menlo,monospace;font-size:21px}@page{size:A4;margin:14mm}';
+/* ---- 請求書をJPEG画像として保存 ---- */
+function invoiceJpeg(c, accId) {
+  const p = DB.profile || {};
+  const _accs = campAccs(c);
+  const acc = (accId ? _accs.find(a => a.id === accId) : null) || _accs[0] || null;
+  const iv = acc ? invOf(c, acc.id) : null;
+  const no = (iv && iv.no) || nextInvoiceNo(parseD(c.date) || TODAY);
+  const hist = (iv && iv.history) || [];
+  const total = acc ? accReward(c, acc.id) : Number(c.reward) || 0;
+  const rate = Number(p.tax) || 0;
+  const sub = rate ? Math.round(total / (1 + rate / 100)) : total;
+  const tax = total - sub;
+  const issued = parseD(c.invoicedAt) || TODAY;
+  const due = new Date(issued.getTime() + (Number(c.payTerm) || 30) * 86400000);
+  const W = 1240, H = 1754, S = 2, M = 78;
+  const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
+  const x = cv.getContext('2d'); x.scale(S, S);
+  const JP = '"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP","Meiryo",sans-serif';
+  const MINF = '"Hiragino Mincho ProN","Yu Mincho",serif';
+  const fnt = (s, w, fam) => (w ? w + ' ' : '') + s + 'px ' + (fam || JP);
+  const txt = (s, px, py, s2, col, w, fam, al) => { x.font = fnt(s2, w, fam); x.fillStyle = col || '#231018'; x.textAlign = al || 'left'; x.fillText(String(s), px, py); x.textAlign = 'left'; };
+  const rect = (px, py, w2, h2, fill, r) => { x.beginPath(); const rr = r || 0; x.moveTo(px + rr, py); x.arcTo(px + w2, py, px + w2, py + h2, rr); x.arcTo(px + w2, py + h2, px, py + h2, rr); x.arcTo(px, py + h2, px, py, rr); x.arcTo(px, py, px + w2, py, rr); x.closePath(); if (fill) { x.fillStyle = fill; x.fill(); } };
+  const ln = (x1, y1, x2, y2, col, w) => { x.beginPath(); x.strokeStyle = col || '#D8D2C4'; x.lineWidth = w || 1; x.moveTo(x1, y1); x.lineTo(x2, y2); x.stroke(); };
+  const wrap = (s, px, py, s2, col, maxw, lh) => {
+    x.font = fnt(s2); x.fillStyle = col || '#6B5A62';
+    const out = []; let cur = '';
+    Array.from(String(s)).forEach(ch => { if (x.measureText(cur + ch).width > maxw) { out.push(cur); cur = ch; } else { cur += ch; } });
+    out.push(cur);
+    out.forEach((l, i) => x.fillText(l, px, py + i * lh));
+    return py + out.length * lh;
+  };
+  rect(0, 0, W, H, '#FFFFFF');
+  txt('請求書', M, 152, 44, '#231018', '700', MINF);
+  txt('INVOICE', M, 182, 14, '#6B5A62');
+  if (hist.length) { x.strokeStyle = '#F84060'; x.lineWidth = 1.5; x.strokeRect(M, 198, 96, 30); txt('再発行', M + 48, 220, 16, '#F84060', '700', null, 'center'); }
+  let my = 120;
+  txt('請求書番号 ' + no, W - M, my, 19, '#231018', null, null, 'right'); my += 28;
+  txt('発行日 ' + jDate(issued), W - M, my, 19, '#231018', null, null, 'right'); my += 28;
+  if (acc) { txt('対象 ' + acc.name, W - M, my, 16, '#6B5A62', null, null, 'right'); my += 26; }
+  if (hist.length) { txt('旧番号 ' + hist.map(h2 => h2.no).join(' / '), W - M, my, 14, '#6B5A62', null, null, 'right'); my += 24; }
+  if (p.regNo) { txt('登録番号 ' + p.regNo, W - M, my, 19, '#231018', null, null, 'right'); }
+  txt((c.client || '（宛先未設定）') + ' 御中', M, 306, 28, '#231018', '700');
+  ln(M, 322, 640, 322, '#231018', 2);
+  txt('下記のとおりご請求申し上げます。', M, 352, 17, '#6B5A62');
+  let iy = 274; const IX = W - M;
+  if (p.issuer) { txt(p.issuer, IX, iy, 22, '#231018', '700', null, 'right'); iy += 30; }
+  else { txt('（発行者名 未設定）', IX, iy, 20, '#B03A2E', '700', null, 'right'); iy += 30; }
+  [p.title, p.zip ? '〒' + p.zip : '', p.address, p.tel ? 'TEL ' + p.tel : '', p.email].forEach(v2 => { if (v2) { txt(v2, IX, iy, 17, '#231018', null, null, 'right'); iy += 26; } });
+  rect(M, 396, W - M * 2, 92, '#FBF4F2', 10);
+  txt('ご請求金額（税込）', M + 24, 452, 20, '#231018');
+  txt(yen(total), W - M - 24, 462, 44, '#231018', '700', 'ui-monospace,Menlo,monospace', 'right');
+  const TX = M, TW = W - M * 2, c2 = TX + TW - 420, c3 = TX + TW - 300, c4 = TX + TW;
+  let ty = 522; const HDR = 48;
+  rect(TX, ty, TW, HDR, '#FBF4F2');
+  txt('品名', c2 - 180, ty + 31, 17, '#231018', '700');
+  txt('数量', c3 - 30, ty + 31, 17, '#231018', '700', null, 'right');
+  txt('単価', c4 - 130, ty + 31, 17, '#231018', '700', null, 'right');
+  txt('金額', c4 - 16, ty + 31, 17, '#231018', '700', null, 'right');
+  const IT = 118, SH = 48;
+  let ry = ty + HDR;
+  txt(c.title, TX + 16, ry + 42, 20, '#231018', '700');
+  txt(c.type + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
+  if (acc) txt(acc.name, TX + 16, ry + 96, 15, '#6B5A62');
+  txt('1', c3 - 30, ry + 58, 19, '#231018', null, null, 'right');
+  txt(yen(sub), c4 - 130, ry + 58, 19, '#231018', null, null, 'right');
+  txt(yen(sub), c4 - 16, ry + 58, 19, '#231018', null, null, 'right');
+  ry += IT;
+  txt('小計', c3 - 30, ry + 32, 18, '#231018', null, null, 'right');
+  txt(yen(sub), c4 - 16, ry + 32, 18, '#231018', null, null, 'right');
+  ry += SH;
+  txt('消費税（' + rate + '%）', c3 - 30, ry + 32, 18, '#231018', null, null, 'right');
+  txt(yen(tax), c4 - 16, ry + 32, 18, '#231018', null, null, 'right');
+  ry += SH;
+  txt('合計', c3 - 30, ry + 34, 20, '#231018', '700', null, 'right');
+  txt(yen(total), c4 - 16, ry + 34, 21, '#231018', '700', null, 'right');
+  const tEnd = ry + SH + 6;
+  x.beginPath(); x.strokeStyle = '#D8D2C4'; x.lineWidth = 1;
+  [c2, c3, c4].forEach(v2 => { x.moveTo(v2, ty); x.lineTo(v2, tEnd); });
+  [ty, ty + HDR, ty + HDR + IT, ty + HDR + IT + SH, ty + HDR + IT + SH * 2, tEnd].forEach(y2 => { x.moveTo(TX, y2); x.lineTo(c4, y2); });
+  x.stroke();
+  let fy = tEnd + 52;
+  txt('お支払期限', M, fy, 18, '#231018', '700');
+  txt(jDate(due), M + 150, fy, 18, '#231018');
+  fy += 34;
+  txt('お振込先', M, fy, 18, '#231018', '700');
+  wrap(p.bank || '（データ管理 → 請求書の発行者情報 で設定してください）', M + 150, fy, 18, p.bank ? '#231018' : '#B03A2E', W - M * 2 - 150, 28);
+  fy += 40;
+  if (p.note) fy = wrap(p.note, M, fy, 16, '#6B5A62', W - M * 2, 26);
+  txt('AMOTI', M, H - 58, 15, '#6B5A62', '700');
+  txt(no + ' / ' + jDate(issued), W - M, H - 58, 14, '#6B5A62', null, null, 'right');
+  const fname = '請求書_' + no + (acc ? '_' + String(acc.name).replace(/[\\/:*?"<>|\s]/g, '') : '') + '.jpg';
+  cv.toBlob(b => {
+    if (!b) { toast('JPEGの作成に失敗しました'); return; }
+    const url = URL.createObjectURL(b);
+    const a2 = document.createElement('a'); a2.href = url; a2.download = fname;
+    document.body.appendChild(a2); a2.click(); a2.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('請求書をJPEGで保存しました（' + no + '）');
+  }, 'image/jpeg', 0.92);
+}
 function printDoc(inner, title) {
   const w = window.open('', '_blank', 'width=880,height=1000');
   if (!w) { toast('ポップアップがブロックされました。ブラウザの設定を確認してください'); return; }
@@ -2112,37 +2275,50 @@ function printDoc(inner, title) {
   w.focus();
   setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
 }
-function openInvoice(id) {
+function openInvoice(id, accId) {
+  migrateInvoices();
   const c = campById(id); if (!c) return;
-  const first = !c.invoice;
+  const _accs = campAccs(c);
+  if (!_accs.length) { toast('アカウントが未設定のため請求書を発行できません'); return; }
+  let acc = accId ? _accs.find(a => a.id === accId) : null;
+  if (!acc) acc = _accs.filter(a => !invOf(c, a.id))[0] || _accs[0];
+  const first = !invOf(c, acc.id);
   if (first) {
+    c.invoices = c.invoices || {};
+    c.invoices[acc.id] = { no: nextInvoiceNo(parseD(c.date) || TODAY), issuedAt: ymd(TODAY), history: [] };
+    syncInvoiceAgg(c);
     c.invoice = nextInvoiceNo(parseD(c.date) || TODAY);
     c.invoicedAt = ymd(TODAY);
     if (c.status === '進行中') c.status = '請求中';
     save(); render();
-    toast('請求書 ' + c.invoice + ' を発行しました（ステータス：請求中）');
+    toast('請求書 ' + c.invoices[acc.id].no + ' を発行しました（' + accLabel(acc.name) + ' ' + yen(accReward(c, acc.id)) + '）');
   }
-  openModal('請求書 ' + c.invoice, `<div id="invWrap">${invoiceBody(c)}</div>
+  const iv = invOf(c, acc.id), hist = (iv && iv.history) || [];
+  openModal('請求書 ' + iv.no + (acc ? '（' + accLabel(acc.name) + '）' : ''), `<div id="invWrap">${invoiceBody(c, acc.id)}</div>
     <div class="inline" style="justify-content:flex-end;margin-top:14px">
       <button class="btn ghost" id="invProf">発行者情報を設定</button>
       ${!first ? '<button class="btn ghost" id="invAgain">再発行（新しい番号で作り直す）</button>' : ''}
+      <button class="btn" id="invJpg">JPEGで保存</button>
       <button class="btn primary" id="invPrint">印刷 / PDF保存</button>
     </div>
     <div class="callout" style="margin-top:12px">
       印刷／PDF保存は<b>何度でも</b>できます（番号は変わりません）。<b>再発行</b>すると新しい番号を採番し、いまの番号は履歴に残ります。金額や宛先・支払期限を直して出し直すときに使ってください。<br>
       PDFにするには、開いた印刷画面の送信先で「PDFに保存」を選んでください。発行者名・住所・振込先は<b>データ管理 → 請求書の発行者情報</b>で登録できます。
     </div>
-    ${(c.invoiceHistory || []).length ? `<div class="callout" style="margin-top:12px"><b>請求書の履歴</b>　${c.invoiceHistory.map(h => `${esc(h.no)}（${esc(h.issuedAt || '—')} / ${yen(h.total)}）`).join(' → ')} → <b>${esc(c.invoice)}</b></div>` : ''}`);
-  document.getElementById('invPrint').onclick = () => printDoc(invoiceBody(c), '請求書 ' + c.invoice);
+    ${hist.length ? `<div class="callout" style="margin-top:12px"><b>請求書の履歴</b>　${hist.map(h => `${esc(h.no)}（${esc(h.issuedAt || '—')} / ${yen(h.total)}）`).join(' → ')} → <b>${esc(invLabel(c))}</b></div>` : ''}`);
+  document.getElementById('invPrint').onclick = () => printDoc(invoiceBody(c, acc.id), '請求書 ' + iv.no);
+  document.getElementById('invJpg').onclick = () => invoiceJpeg(c, acc.id);
   document.getElementById('invProf').onclick = () => { closeModal(); go('admin'); };
   const ag = document.getElementById('invAgain');
   if (ag) ag.onclick = () => {
-    c.invoiceHistory = c.invoiceHistory || [];
-    c.invoiceHistory.push({ no: c.invoice, issuedAt: c.invoicedAt || '', total: Number(c.reward) || 0 });
-    c.invoice = nextInvoiceNo(TODAY);
-    c.invoicedAt = ymd(TODAY);
+    iv.history = iv.history || [];
+    iv.history.push({ no: iv.no, issuedAt: iv.issuedAt || '', total: accReward(c, acc.id) });
+    iv.no = nextInvoiceNo(TODAY);
+    iv.issuedAt = ymd(TODAY);
+    syncInvoiceAgg(c);
     save(); render();
-    openInvoice(c.id);
+    toast('請求書 ' + iv.no + ' を再発行しました（' + accLabel(acc.name) + '）');
+    openInvoice(c.id, acc.id);
     toast('新しい番号 ' + c.invoice + ' で再発行しました');
   };
 }
@@ -3902,6 +4078,25 @@ function applyMobileTables() {
     tw.appendChild(wrap);
   });
 }
+/* 複数アカウントの案件：アカウントごとに分けて表示（案件管理・要対応で共通） */
+function paccRowsHTML(camp, accs) {
+  const mm = campInsight(camp);
+  return accs.map(a => {
+    const rw = yen(accReward(camp, a.id));
+    const dt = (camp.accDates && camp.accDates[a.id]) ? camp.accDates[a.id] : camp.date;
+    const by = (mm.byAcc || {})[a.id];
+    const pp2 = mm.posts.filter(x => x.accountId === a.id);
+    const er2 = pp2.length ? pp2.reduce((s2, x) => s2 + metrics(x).er, 0) / pp2.length : 0;
+    const ins = (by && by.posts)
+      ? `<button class="ins-btn" data-ins-camp="${esc(camp.id)}" data-ins-acc="${esc(a.id)}"><i class="insb">リーチ ${wan(by.reach)}</i><i class="insb">ER ${er2.toFixed(2)}%</i></button>`
+      : `<button class="ins-btn empty" data-ins-camp="${esc(camp.id)}" data-ins-acc="${esc(a.id)}">＋ 画像を取り込む</button>`;
+    const iv2 = invOf(camp, a.id);
+    return `<div class="pacc-b"><div class="pacc-h"><span class="acc" title="${esc(a.name)}">${esc(accLabel(a.name))}</span><span class="pair"><span class="k">報酬額</span><b>${rw}</b></span>`
+      + `<button type="button" class="btn sm inv-mini${iv2 ? ' on' : ''}" data-inv="${esc(camp.id)}" data-inv-acc="${esc(a.id)}">${iv2 ? '請求書 再発行' : '請求書発行'}</button></div>`
+      + `<div class="mcard-r"><span class="k">投稿日</span><span class="v">${esc(jYMD(dt))}</span></div>`
+      + `<div class="mcard-r ins"><span class="k">インサイト情報</span><span class="v">${ins}</span></div></div>`;
+  }).join('');
+}
 /* 案件管理のスマホカード：1行目=日時/店舗名（タップで編集）／2行目（右詰め）=ステータス＋請求書発行
    報酬額の行=アカウント名＋報酬額＋投稿日 ／ インサイト=バッジ表示 ／ ▶は削除 */
 function packCampCards() {
@@ -3939,21 +4134,8 @@ function packCampCards() {
     const _accs = _camp ? campAccs(_camp) : [];
     if (_camp && _accs.length > 1) {
       live().forEach(r => { const k = r.querySelector('.k'); const lb = k ? k.textContent : ''; if (/アカウント|報酬|投稿日|インサイト/.test(lb)) r.remove(); });
-      const mm = campInsight(_camp);
       const box = document.createElement('div'); box.className = 'pacc';
-      box.innerHTML = _accs.map(a => {
-        const rw = (_camp.rewards && _camp.rewards[a.id] !== undefined) ? yen(_camp.rewards[a.id]) : yen(_camp.reward);
-        const dt = (_camp.accDates && _camp.accDates[a.id]) ? _camp.accDates[a.id] : _camp.date;
-        const by = mm.byAcc[a.id];
-        const pp2 = mm.posts.filter(x => x.accountId === a.id);
-        const er2 = pp2.length ? pp2.reduce((s2, x) => s2 + metrics(x).er, 0) / pp2.length : 0;
-        const ins = (by && by.posts)
-          ? `<button class="ins-btn" data-ins-camp="${esc(_camp.id)}" data-ins-acc="${esc(a.id)}"><i class="insb">リーチ ${wan(by.reach)}</i><i class="insb">ER ${er2.toFixed(2)}%</i></button>`
-          : `<button class="ins-btn empty" data-ins-camp="${esc(_camp.id)}" data-ins-acc="${esc(a.id)}">＋ 画像を取り込む</button>`;
-        return `<div class="pacc-b"><div class="pacc-h"><span class="acc" title="${esc(a.name)}">${esc(accLabel(a.name))}</span><span class="pair"><span class="k">報酬額</span><b>${rw}</b></span></div>`
-          + `<div class="mcard-r"><span class="k">投稿日</span><span class="v">${esc(jYMD(dt))}</span></div>`
-          + `<div class="mcard-r ins"><span class="k">インサイト情報</span><span class="v">${ins}</span></div></div>`;
-      }).join('');
+      box.innerHTML = paccRowsHTML(_camp, _accs);
       card.appendChild(box);
       card.dataset.packed = '1';
       return;
@@ -4035,9 +4217,10 @@ function packAlertCards() {
     const camp = card.dataset.openCamp ? campById(card.dataset.openCamp) : null;
     const head = card.querySelector('.mcard-h');
     if (!head) return;
+    if (camp) migrateInvoices();
     const live = () => [...card.children].filter(el => el.classList.contains('mcard-r'));
     const pick = re => { for (const r of live()) { const k = r.querySelector('.k'); if (k && re.test(k.textContent || '')) return r; } return null; };
-    const rCli = pick(/クライアント|店舗/), rAcc = pick(/アカウント/), rRew = pick(/報酬/), rPost = pick(/投稿日/), rSt = pick(/ステータス/);
+    const rCli = pick(/クライアント|店舗/), rAcc = pick(/アカウント/), rRew = pick(/報酬/), rPost = pick(/投稿日/), rSt = pick(/ステータス/), rIns = pick(/インサイト/);
     const hd = document.createElement('span'); hd.className = 'hd';
     if (camp) hd.setAttribute('data-open-camp', esc(camp.id));
     while (head.firstChild) hd.appendChild(head.firstChild);
@@ -4048,15 +4231,28 @@ function packAlertCards() {
         const on = x === camp.status;
         return `<button type="button" class="st-opt${on ? ' on' : ''}" data-set-st="${esc(x)}"` +
           `${on ? ` style="background:${ST_COLOR[x]};border-color:${ST_COLOR[x]};color:${ST_FG[x] || '#fff'}"` : ''}>${esc(x)}</button>`;
-      }).join('') + `</div>`
-        + `<button class="btn sm" data-inv="${esc(camp.id)}">${camp.invoice ? '請求書 再発行' : '請求書発行'}</button>`;
+      }).join('') + `</div>`;
       head.appendChild(acts);
     }
     if (rCli) { rCli.classList.add('name-row'); const k = rCli.querySelector('.k'); if (k) k.remove(); const v = rCli.querySelector('.v'); if (v) { v.style.textAlign = 'left'; v.classList.add('tx'); } }
     if (rSt) rSt.remove();
-    if (rAcc) rAcc.classList.add('stk');
+    const _accsA = camp ? campAccs(camp) : [];
+    if (camp && _accsA.length > 1) {
+      [rAcc, rRew, rPost, rIns].forEach(r => { if (r) r.remove(); });
+      const box = document.createElement('div'); box.className = 'pacc';
+      box.innerHTML = paccRowsHTML(camp, _accsA);
+      card.appendChild(box);
+      card.dataset.packed = '1';
+      return;
+    }
     if (rRew && rPost) {
       const two = document.createElement('div'); two.className = 'mcard-r two';
+      if (rAcc) {
+        const v0 = rAcc.querySelector('.v');
+        const nm = ((v0 && (v0.getAttribute('title') || v0.textContent)) || '').trim();
+        if (nm) { const s = document.createElement('span'); s.className = 'acc'; s.textContent = accLabel(nm); two.appendChild(s); }
+        rAcc.remove();
+      }
       [[rRew, '報酬額'], [rPost, '投稿日']].forEach(([r, lab]) => {
         const pair = document.createElement('span'); pair.className = 'pair';
         const k = document.createElement('span'); k.className = 'k'; k.textContent = lab;
@@ -4069,6 +4265,48 @@ function packAlertCards() {
     card.dataset.packed = '1';
   });
 }
+/* スマホカード：請求書発行ボタンを報酬額の行（アカウントごと）へ移す */
+function attachAccInvBtns() {
+  if (!MQ_MOBILE()) return;
+  ['#view-campaigns', '#view-alerts'].forEach(sel => {
+    const root = document.querySelector(sel); if (!root) return;
+    root.querySelectorAll('.mcard').forEach(card => {
+      const cid = card.dataset.rec || card.dataset.openCamp || '';
+      const camp = cid ? campById(cid) : null;
+      if (!camp) return;
+      const accs = campAccs(camp); if (!accs.length) return;
+      card.querySelectorAll('.mcard-h button[data-inv]').forEach(b => b.remove());
+      const rows0 = [...card.children].filter(el => el.classList.contains('mcard-r'));
+      const blocks = card.querySelectorAll('.pacc-b');
+      if (blocks.length) {
+        blocks.forEach((b, i2) => {
+          const a = accs[i2]; if (!a) return;
+          const h2 = b.querySelector('.pacc-h'); if (!h2) return;
+          if (h2.querySelector('button[data-inv]')) return;
+          h2.appendChild(accInvBtn(camp, a));
+        });
+        return;
+      }
+      for (const r of rows0) {
+        const k = r.querySelector('.k');
+        if (k && /報酬/.test(k.textContent || '')) {
+          if (!r.querySelector('button[data-inv]')) r.appendChild(accInvBtn(camp, accs[0]));
+          return;
+        }
+      }
+    });
+  });
+}
+function accInvBtn(camp, a) {
+  const b = document.createElement('button');
+  const iv = invOf(camp, a.id);
+  b.type = 'button';
+  b.className = 'btn sm inv-mini' + (iv ? ' on' : '');
+  b.setAttribute('data-inv', camp.id);
+  b.setAttribute('data-inv-acc', a.id);
+  b.textContent = iv ? '請求書 再発行' : '請求書発行';
+  return b;
+}
 let lastMQ = MQ_MOBILE(), mqTimer;
 window.addEventListener('resize', () => {
   clearTimeout(mqTimer);
@@ -4077,6 +4315,7 @@ window.addEventListener('resize', () => {
 window.addEventListener('orientationchange', () => setTimeout(() => { lastMQ = MQ_MOBILE(); render(); }, 260));
 
 function render() {
+  if (!_invMig) { _invMig = true; migrateInvoices(); }
   renderRailAccounts();
   const active = currentView;
   if (active === 'dash') renderDash();
@@ -4092,7 +4331,7 @@ function render() {
   const _fs = document.getElementById('footStamp');
   if (_fs) _fs.textContent =
     '最終更新 ' + TODAY.getFullYear() + '.' + String(TODAY.getMonth()+1).padStart(2,'0') + '.' + String(TODAY.getDate()).padStart(2,'0');
-  applyMobileTables();
+  applyMobileTables(); attachAccInvBtns();
   packCampCards();
   packAlertCards();
   updateAlertNav();
@@ -5171,14 +5410,17 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .mcard-r.ins .k{flex:0 0 auto;white-space:nowrap}
   #view-campaigns .mcard-r.ins .v{margin-left:auto;white-space:nowrap}
   #view-campaigns .mcard-r.two .acc{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #view-campaigns .pacc{margin-top:6px}
-  #view-campaigns .pacc-b{padding:7px 0 2px;border-top:1px dashed var(--line)}
+  #view-campaigns .pacc,#view-alerts .pacc{margin-top:6px}
+  #view-campaigns .pacc-b,#view-alerts .pacc-b{padding:7px 0 2px;border-top:1px dashed var(--line)}
   #view-campaigns .pacc-b:first-child{border-top:0;padding-top:0}
-  #view-campaigns .pacc-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:2px}
-  #view-campaigns .pacc-h .acc{font-size:11.5px;font-weight:900;color:var(--mori);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #view-campaigns .pacc-h .pair{display:inline-flex;gap:5px;align-items:baseline}
+  #view-campaigns .pacc-h,#view-alerts .pacc-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:2px}
+  #view-campaigns .pacc-h .acc,#view-alerts .pacc-h .acc{font-size:11.5px;font-weight:900;color:var(--mori);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #view-campaigns .pacc-h .pair,#view-alerts .pacc-h .pair{display:inline-flex;gap:5px;align-items:baseline}
   #view-campaigns .pacc-h b{font-family:var(--mono);font-size:12.5px}
-  #view-campaigns .pacc .mcard-r{padding:1.5px 0}
+  #view-campaigns .pacc .mcard-r,#view-alerts .pacc .mcard-r{padding:1.5px 0}
+  #view-alerts .mcard-r.two,#view-campaigns .mcard-r.two{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:2px 0}
+  #view-alerts .mcard-r.two .pair,#view-campaigns .mcard-r.two .pair{display:inline-flex;gap:5px;align-items:baseline}
+  #view-alerts .mcard-r.two .acc,#view-campaigns .mcard-r.two .acc{font-size:11.5px;font-weight:900;color:var(--mori);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #view-alerts .mcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px}
   #view-alerts .mcard-h .hd{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;flex:1 1 100%;cursor:pointer}
   #view-alerts .mcard-h .acts{width:100%;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;align-items:center}
@@ -5198,6 +5440,8 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .trend-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .trend-tab{border:1.4px solid var(--line);background:#fff;color:var(--cha);border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;min-height:36px;line-height:1.1}
 .trend-tab.on{background:var(--mori);border-color:var(--mori);color:#fff}
+.inv-mini{padding:5px 10px!important;font-size:11px!important;min-height:30px;flex:0 0 auto;white-space:nowrap}
+.inv-mini.on{background:var(--mori)!important;border-color:var(--mori)!important;color:#fff!important}
 .per-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 0;border-top:1px dashed var(--line)}
 .per-row:first-child{border-top:0}
 .per-row .an{font-size:11.5px;font-weight:800;flex:1 1 100%}
