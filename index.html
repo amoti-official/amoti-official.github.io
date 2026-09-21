@@ -438,6 +438,17 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
   font-size:9.5px;line-height:1.35;color:var(--cha);font-weight:500;word-break:break-word;
 }
 .cal-more{font-size:9.5px;color:var(--cha);font-family:var(--mono)}
+.cal-note{font-size:10px;color:var(--cha);font-weight:600}
+.cal-agg{display:flex;flex-direction:column;gap:4px;margin-top:2px}
+.cal-ag-row{display:flex;align-items:center;gap:5px;min-width:0}
+.cal-ag-lab{flex:0 0 auto;font-size:9px;font-weight:800;color:var(--cha);letter-spacing:.04em}
+.cal-chips{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:0}
+.cal-chip{position:relative;display:inline-flex;flex:0 0 auto;line-height:0}
+.cal-ic{width:22px;height:22px;border-radius:50%;object-fit:cover;display:block;border:1px solid var(--line);background:#fff}
+.cal-ic.fb{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:var(--mori-3);border-color:transparent}
+.cal-chip.post .cal-ic.fb{background:var(--kohaku);color:#33260A}
+.cal-num{position:absolute;right:-6px;bottom:-5px;min-width:14px;height:14px;padding:0 3px;border-radius:99px;background:var(--mori);color:#fff;border:1.5px solid #fff;font-family:var(--mono);font-size:9px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center}
+.cal-chip.post .cal-num{background:var(--kohaku);color:#33260A}
 @media (max-width:860px){
   .cal-grid{gap:3px}
   .cal-cell{min-height:66px;padding:4px 3px}
@@ -447,6 +458,12 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
   .cal-ev .ce-top,.cal-ev .ce-title{display:none}
   .cal-ev.visit{background:var(--mori)}
   .cal-ev.post{background:var(--kohaku)}
+  .cal-agg{gap:3px}
+  .cal-ic{width:18px;height:18px}
+  .cal-ic.fb{font-size:9px}
+  .cal-ag-lab{font-size:8px}
+  .cal-chips{gap:4px}
+  .cal-cell{min-height:78px}
   .cal-month{font-size:16px;min-width:112px}
   .cal-bar{gap:8px}
 }
@@ -830,6 +847,7 @@ html{zoom:.7}
           <div class="legend" style="margin:0 0 0 auto">
             <span><i style="background:var(--mori)"></i>訪問</span>
             <span><i style="background:var(--kohaku)"></i>投稿</span>
+            <span class="cal-note">アイコン＋数字＝その日の件数</span>
           </div>
         </div>
         <div class="cal-grid" id="calGrid"></div>
@@ -3393,17 +3411,29 @@ function renderSchedule() {
       const list = (bucket[k] || []).slice().sort((a, b2) => new Date(a.at) - new Date(b2.at));
       const isToday = k === ymd(TODAY);
       const sel = k === calSelected;
+      const agg = { visit: {}, post: {} };
+      list.forEach(e => { const g = agg[e.kind] || (agg[e.kind] = {}); const aid = e.accId || ''; g[aid] = (g[aid] || 0) + 1; });
+      const chip = (kind, aid, n2) => {
+        const a2 = (DB.accounts || []).filter(x => x.id === aid)[0];
+        const nm = a2 ? (a2.name || '') : (aid ? accName(aid) : 'アカウント未設定');
+        const icon = (a2 && a2.icon)
+          ? `<img class="cal-ic" src="${esc(a2.icon)}" alt="">`
+          : `<span class="cal-ic fb">${esc(Array.from(String(nm || '?'))[0] || '?')}</span>`;
+        return `<span class="cal-chip ${kind}" title="${esc(nm)}｜${kind === 'visit' ? '訪問' : '投稿'} ${n2}件">${icon}<i class="cal-num">${n2}</i></span>`;
+      };
+      const rowAgg = (kind, label) => {
+        const g = agg[kind] || {};
+        const ks = Object.keys(g).filter(x => g[x] > 0).sort((x, y2) => g[y2] - g[x]);
+        if (!ks.length) return '';
+        const shown = ks.slice(0, 4);
+        return `<div class="cal-ag-row ${kind}"><span class="cal-ag-lab">${label}</span><span class="cal-chips">`
+          + shown.map(x => chip(kind, x, g[x])).join('')
+          + (ks.length > 4 ? `<span class="cal-more">＋${ks.length - 4}</span>` : '')
+          + `</span></div>`;
+      };
       return `<div class="cal-cell ${c.out ? 'out' : ''} ${isToday ? 'today' : ''} ${sel ? 'sel' : ''}" data-cal-day="${k}">
         <div class="cal-cell-h"><span class="cal-d">${c.d.getDate()}</span>${list.length ? `<span class="cal-cnt">${list.length}</span>` : ''}</div>
-        <div class="cal-evs">${list.slice(0, 3).map(e => {
-          const dt = new Date(e.at);
-          const hh = e.kind === 'visit' ? String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0') : '';
-          return `<button class="cal-ev ${e.kind}" data-open-camp="${esc(e.camp.id)}" title="${esc(e.camp.client)} / ${esc(e.camp.title)}">
-            <span class="ce-top">${hh ? `<b>${esc(hh)}</b>` : ''}${esc(e.accId ? accName(e.accId) : campAccNames(e.camp))}</span>
-            <span class="ce-title">${esc(campTitle(e.camp))}</span>
-          </button>`;
-        }).join('')}</div>
-        ${list.length > 3 ? `<div class="cal-more">＋${list.length - 3}件</div>` : ''}
+        <div class="cal-agg">${rowAgg('visit', '訪問')}${rowAgg('post', '投稿')}</div>
       </div>`;
     }).join('');
 
