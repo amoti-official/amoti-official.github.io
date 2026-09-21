@@ -4617,8 +4617,30 @@ async function sbRefreshSession() {
   try { const d = await sbFetch('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: c.sbRefresh }) }); sbSetSession(d, c.sbEmail); return true; }
   catch (e) { c.sbToken = ''; c.sbRefresh = ''; c.sbUserId = ''; return false; }
 }
-async function sbLoadState(ws) { const rows = await sbFetch('/rest/v1/amoti_state?workspace_id=eq.' + encodeURIComponent(ws) + '&select=state,updated_at', { method: 'GET' }); return (rows && rows[0]) || null; }
-async function sbSaveState(ws, state) { await sbFetch('/rest/v1/amoti_state', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ workspace_id: ws, state: state, updated_at: new Date().toISOString() }]) }); }
+async function sbLoadState(ws) {
+  const c = sbC(), q = encodeURIComponent(ws);
+  if (c.sbMode !== 'settings') {
+    try {
+      const rows = await sbFetch('/rest/v1/amoti_state?workspace_id=eq.' + q + '&select=state,updated_at', { method: 'GET' });
+      c.sbMode = 'table';
+      return (rows && rows[0]) || null;
+    } catch (e) { c.sbMode = 'settings'; }
+  }
+  const rows2 = await sbFetch('/rest/v1/workspace_settings?workspace_id=eq.' + q + '&select=profile', { method: 'GET' });
+  const pf = rows2 && rows2[0] && rows2[0].profile;
+  return (pf && pf.__amoti) ? { state: pf.__amoti, updated_at: null } : null;
+}
+async function sbSaveState(ws, state) {
+  const c = sbC();
+  if (c.sbMode !== 'settings') {
+    try {
+      await sbFetch('/rest/v1/amoti_state', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ workspace_id: ws, state: state, updated_at: new Date().toISOString() }]) });
+      c.sbMode = 'table';
+      return;
+    } catch (e) { c.sbMode = 'settings'; }
+  }
+  await sbFetch('/rest/v1/workspace_settings', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ workspace_id: ws, profile: { __amoti: state } }]) });
+}
 async function sbWsList() {
   const rows = await sbFetch('/rest/v1/workspace_members?select=workspace_id,role,workspaces(id,name)', { method: 'GET' });
   return (rows || []).map(function (r) { return { id: r.workspace_id, role: r.role, name: (r.workspaces && r.workspaces.name) || '(無名)' }; });
