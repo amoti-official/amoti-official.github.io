@@ -3855,25 +3855,28 @@ function applyMobileTables() {
     tw.appendChild(wrap);
   });
 }
-/* 案件管理のスマホカード：日時＋名称＋ステータス＋請求書を1行目へ／報酬額と投稿日を横並び／インサイトを1行 */
+/* 案件管理のスマホカード：1行目=日時/店舗名（タップで編集）／2行目（右詰め）=ステータス＋請求書発行
+   報酬額の行=アカウント名＋報酬額＋投稿日 ／ インサイト=バッジ表示 ／ ▶は削除 */
 function packCampCards() {
   if (!MQ_MOBILE()) return;
   document.querySelectorAll('#view-campaigns .tw .mcards .mcard').forEach(card => {
     if (card.dataset.packed === '1') return;
-    const rows = [...card.children].filter(el => el.classList.contains('mcard-r'));
     const head = card.querySelector('.mcard-h');
     if (!head) return;
-    const pick = re => { for (const r of rows) { const k = r.querySelector('.k'); if (k && re.test(k.textContent || '')) return r; } return null; };
+    const live = () => [...card.children].filter(el => el.classList.contains('mcard-r'));
+    live().forEach(r => { if (r.querySelector('.rec-caret')) r.remove(); });
+    const pick = re => { for (const r of live()) { const k = r.querySelector('.k'); if (k && re.test(k.textContent || '')) return r; } return null; };
     const rCli = pick(/クライアント|店舗/), rAcc = pick(/アカウント/), rRew = pick(/報酬/), rPost = pick(/投稿日/);
     const rIns = pick(/インサイト/), rSt = pick(/ステータス/), rInv = pick(/請求書/);
+    const hd = document.createElement('span'); hd.className = 'hd';
+    if (card.dataset.rec) hd.setAttribute('data-open-camp', card.dataset.rec);
+    while (head.firstChild) hd.appendChild(head.firstChild);
     if (rCli) {
       const nm = rCli.querySelector('.v');
-      if (nm && nm.textContent.trim()) {
-        const s = document.createElement('span'); s.className = 'nm'; s.textContent = nm.textContent.trim();
-        head.appendChild(s);
-      }
+      if (nm && nm.textContent.trim()) { const s = document.createElement('span'); s.className = 'nm'; s.textContent = nm.textContent.trim(); hd.appendChild(s); }
       rCli.remove();
     }
+    head.appendChild(hd);
     if (rSt || rInv) {
       const acts = document.createElement('span'); acts.className = 'acts';
       [rSt, rInv].forEach(r => {
@@ -3882,11 +3885,15 @@ function packCampCards() {
         if (v) { while (v.firstChild) acts.appendChild(v.firstChild); }
         r.remove();
       });
+      acts.querySelectorAll('button[data-inv]').forEach(b => { if (b.textContent.trim() === '発行') b.textContent = '請求書発行'; });
       if (acts.childNodes.length) head.appendChild(acts);
     }
     if (rAcc) rAcc.classList.add('stk');
     if (rRew && rPost) {
       const two = document.createElement('div'); two.className = 'mcard-r two';
+      let accShort = '';
+      if (rAcc) { const c = rAcc.querySelector('.v .chip') || rAcc.querySelector('.v'); if (c) accShort = (c.textContent || '').split(/[｜|]/)[0].trim(); }
+      if (accShort) { const s = document.createElement('span'); s.className = 'acc'; s.textContent = accShort; two.appendChild(s); }
       [[rRew, '報酬額'], [rPost, '投稿日']].forEach(([r, lab]) => {
         const pair = document.createElement('span'); pair.className = 'pair';
         const k = document.createElement('span'); k.className = 'k'; k.textContent = lab;
@@ -3898,16 +3905,20 @@ function packCampCards() {
       rRew.remove(); rPost.remove();
     }
     if (rIns) {
+      rIns.classList.add('ins');
       const v = rIns.querySelector('.v');
-      if (v) {
-        let host = v, guard = 0;
-        while (host.children.length === 1 && host.children[0].children.length && guard++ < 4) host = host.children[0];
-        if (host.children.length > 1) {
-          const parts = [...host.children].map(c => (c.textContent || '').trim()).filter(Boolean);
-          if (parts.length > 1) v.textContent = parts.join(' / ');
-        }
+      const btn = v && v.querySelector('.ins-btn');
+      if (btn) {
+        const bEl = btn.querySelector('b'), sEl = btn.querySelector('span');
+        let er = sEl ? sEl.textContent.replace(/\s+/g, ' ').trim() : '', cnt = '';
+        const parts = er.split(/\s*[／\/]\s*/);
+        if (parts.length > 1) { er = parts[0]; cnt = parts.slice(1).join(' / '); }
+        let out = '';
+        if (bEl && bEl.textContent.trim()) out += '<i class="insb">' + esc(bEl.textContent.replace(/\s+/g, ' ').trim()) + '</i>';
+        if (er) out += '<i class="insb">' + esc(er) + '</i>';
+        if (cnt) out += '<i class="insn">' + esc(cnt) + '</i>';
+        if (out) btn.innerHTML = out;
       }
-      if (v) v.classList.add('one');
     }
     card.dataset.packed = '1';
   });
@@ -4987,16 +4998,20 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .rec-panel{padding:10px 12px 12px}
   #view-campaigns .rec-grid{gap:6px 10px;margin-bottom:8px}
 }
-  #view-campaigns .mcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12.5px}
-  #view-campaigns .mcard-h .nm{font-weight:900;font-size:13px;font-family:var(--sans)}
-  #view-campaigns .mcard-h .acts{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-  #view-campaigns .mcard-h .acts .st-sel{padding:3px 7px;font-size:10.5px;min-height:25px;font-weight:800}
-  #view-campaigns .mcard-h .acts .btn{padding:3px 8px;font-size:10.5px;min-height:25px}
+  #view-campaigns .mcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;font-size:12.5px}
+  #view-campaigns .mcard-h .hd{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;flex:1 1 100%;cursor:pointer}
+  #view-campaigns .mcard-h .hd .nm{font-weight:900;font-size:13px;font-family:var(--sans)}
+  #view-campaigns .mcard-h .acts{width:100%;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;align-items:center}
+  #view-campaigns .mcard-h .acts .st-sel{padding:3px 8px;font-size:10.5px;min-height:26px;font-weight:800}
+  #view-campaigns .mcard-h .acts .btn{padding:3px 9px;font-size:10.5px;min-height:26px}
   #view-campaigns .mcard-r.stk{display:block}
   #view-campaigns .mcard-r.stk .v{display:block;text-align:left;margin-top:2px}
-  #view-campaigns .mcard-r.two{justify-content:flex-start;gap:18px}
+  #view-campaigns .mcard-r.two{justify-content:flex-start;gap:14px;flex-wrap:wrap}
   #view-campaigns .mcard-r.two .pair{display:inline-flex;gap:6px;align-items:baseline}
-  #view-campaigns .mcard-r .v.one{white-space:nowrap;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #view-campaigns .mcard-r .acc{font-size:11px;color:var(--cha);font-weight:800;margin-right:8px}
+  #view-campaigns .mcard .ins-btn{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;border:0;background:transparent;padding:0;box-shadow:none;min-height:0}
+  #view-campaigns .mcard .insb{font-style:normal;font-weight:800;font-size:11px;color:var(--mori);background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-family:var(--mono)}
+  #view-campaigns .mcard .insn{font-style:normal;font-size:10.5px;color:var(--cha);font-weight:700}
 }
 </style>
 <div id="devPreview" aria-hidden="true">
