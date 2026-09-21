@@ -2105,7 +2105,14 @@ function openCamp(id, presetAcc, opts) {
   };
   form.onsubmit = e => {
     e.preventDefault();
-    const v = n => form.elements[n].value;
+    const v = n => (form.elements[n] && form.elements[n].value) || '';
+    /* select は value 属性なしなので selectedOptions[0].text をフォールバックに使う */
+    const selVal = (n) => {
+      const el = form.elements[n];
+      if (!el) return '';
+      const so = el.selectedOptions && el.selectedOptions[0];
+      return (el.value || (so && so.text) || '').trim();
+    };
     const accountIds = [...form.querySelectorAll('input[name="accountIds"]:checked')].map(x => x.value);
     if (!accountIds.length) { toast('投稿アカウントを1つ以上選んでください'); return; }
     const rewards = {}, accDates = {}; let filled = 0, sumRw = 0;
@@ -2113,9 +2120,12 @@ function openCamp(id, presetAcc, opts) {
     form.querySelectorAll('#cfPerAcc input[data-dt]').forEach(i => { if (i.value) accDates[i.dataset.dt] = i.value; });
     const multi = accountIds.length > 1;
     const firstDate = Object.keys(accDates).map(k => accDates[k]).sort()[0];
+    const _genre = selVal('genre') || '未設定';
+    const _price = selVal('priceRange') || '未設定';
     const data = {
       client: v('client').trim(), accountIds,
-      genre: v('genre'), priceRange: v('priceRange'),
+      genre: _genre, priceRange: _price,
+      type: '',  /* 旧仕様の残骸を必ず空文字で上書き */
       reward: multi ? (filled ? sumRw : ((c && c.reward) || Number(v('reward')) || 0)) : (Number(v('reward')) || 0), status: v('status'),
       date: (multi && firstDate) ? firstDate : v('date'), visitAt: v('visitAt'),
       note: v('note').trim()
@@ -2126,11 +2136,19 @@ function openCamp(id, presetAcc, opts) {
     }
     if (c) {
       Object.assign(c, data);
-      /* 旧 c.type は空文字で上書きし、Supabase 同期時に必ず最新スタンプが付くようにする（削除だとremoteの古い値が復活してしまう） */
-      c.type = '';
-      if (c._ft && typeof c._ft === 'object') { try { delete c._ft.type; } catch (e) {} }
+      /* recFieldMerge の「新しい方勝ち」で必ず勝てるよう、フィールドタイムスタンプを最新化 */
+      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
+      c._ft = c._ft || {};
+      c._ft.genre = _now;
+      c._ft.priceRange = _now;
+      c._ft.type = _now;
+      c._t = _now;
     } else {
-      DB.campaigns.push(Object.assign({ id: uid('c'), invoicedAt: '', dropped: false, type: '' }, data));
+      const newC = Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data);
+      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
+      newC._t = _now;
+      newC._ft = { genre: _now, priceRange: _now, type: _now };
+      DB.campaigns.push(newC);
     }
     save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
   };
@@ -4300,16 +4318,9 @@ function packCampCards() {
     }
     const _camp = card.dataset.rec ? campById(card.dataset.rec) : null;
     const _accs = _camp ? campAccs(_camp) : [];
-    if (_camp) {
-      const _g = (_camp.genre && _camp.genre !== '未設定') ? _camp.genre : (_camp.type || '');
-      const _pr = (_camp.priceRange && _camp.priceRange !== '未設定') ? _camp.priceRange : '';
-      const gp = document.createElement('div');
-      gp.className = 'mcard-gp';
-      gp.innerHTML =
-        (_g ? `<span class="gp-chip">${esc(_g)}</span>` : `<span class="gp-chip empty">ジャンル未登録</span>`)
-        + (_pr ? `<span class="gp-chip">${esc(_pr)}</span>` : `<span class="gp-chip empty">客単価未登録</span>`);
-      head.insertAdjacentElement('afterend', gp);
-    }
+    /* 注意：ジャンル・客単価はPC版td[1]内の<div>で既に埋め込み済み。
+       mcard-h の中にそのまま転写されているため、ここで別カードを追加すると
+       重複＆キャッシュ不整合になるので、追加処理は行わない */
     if (_camp && _accs.length > 1) {
       live().forEach(r => { const k = r.querySelector('.k'); const lb = k ? k.textContent : ''; if (/アカウント|報酬|投稿日|インサイト/.test(lb)) r.remove(); });
       const box = document.createElement('div'); box.className = 'pacc';
@@ -5493,7 +5504,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260921-0148Z';
+const SB_BUILD = '20260921-1128Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
