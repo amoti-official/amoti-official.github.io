@@ -4835,7 +4835,34 @@ function openBrief() {
 
 /* PWA: ホーム画面に追加してオフラインでも開けるようにする */
 if (!window.__PV && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      /* SW更新チェック：新バージョンを検出したら即インストール */
+      try { reg.update(); } catch (e) {}
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          /* 新SWが activated したら1回だけリロード（現行タブに反映） */
+          if (nw.state === 'activated' && navigator.serviceWorker.controller) {
+            if (!sessionStorage.getItem('__sw_reloaded_v3')) {
+              sessionStorage.setItem('__sw_reloaded_v3', '1');
+              location.reload();
+            }
+          }
+        });
+      });
+    }).catch(() => {});
+    /* 既存SWのコントローラが変わったら1回だけリロード */
+    let _swReloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_swReloading) return; _swReloading = true;
+      if (!sessionStorage.getItem('__sw_reloaded_v3ctrl')) {
+        sessionStorage.setItem('__sw_reloaded_v3ctrl', '1');
+        location.reload();
+      }
+    });
+  });
 }
 
 /* 起動 */
@@ -5403,6 +5430,13 @@ function trendsAutoInit() {
     } catch (e) {}
   }).catch(() => {});
 }
+/* 安全策：関数を window に明示公開（スコープ取りこぼし対策） */
+try {
+  window.refreshTrends = refreshTrends;
+  window.sbLoadTrends = sbLoadTrends;
+  window.mergeTrendsIntoNews = mergeTrendsIntoNews;
+  window.trendsAutoInit = trendsAutoInit;
+} catch (e) {}
 async function sbSaveState(state) {
   await sbFetch('/rest/v1/amoti_share', {
     method: 'POST',
