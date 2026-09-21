@@ -1332,6 +1332,8 @@ function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36
 const accById = id => DB.accounts.find(a => a.id === id);
 const campById = id => DB.campaigns.find(c => c.id === id);
 const accName = id => { const a = accById(id); return a ? a.name : '（未設定）'; };
+/* アカウント表示名は15文字まで（超える場合は … を付けて省略） */
+const ellip15 = s => { const a = Array.from(String(s === undefined || s === null ? '' : s)); return a.length > 15 ? a.slice(0, 15).join('') + '...' : a.join(''); };
 const accFollowers = id => { const a = accById(id); return a ? (Number(a.followers) || 0) : 1; };
 
 /* 派生指標 */
@@ -1912,7 +1914,7 @@ function renderCampaigns() {
         <td><span class="rec-dot" style="background:${flag}" title="${c.dropped ? '見送り' : c.status}"></span></td>
         <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}</td>
         <td>${campHead(c)}</td>
-        <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0">${esc(a.name)}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
+        <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0">${esc(ellip15(a.name))}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
         <td class="num r">${yen(c.reward)}</td>
         <td class="num">${esc(jYMD(c.date))}${late ? '<div style="font-size:9.5px;color:var(--shu);font-weight:800">期日超過</div>' : ''}</td>
         <td>${ins.posts.length
@@ -1939,7 +1941,7 @@ function campForm(c, presetAcc) {
   return `<form id="campForm" class="fgrid">
     <div class="field wide"><label>クライアント / 店舗名 *</label><input name="client" required value="${esc(d.client)}" placeholder="株式会社◯◯ / ◯◯食堂"></div>
     <div class="field wide"><label>投稿アカウント（同じ店舗に別アカウントで訪問する場合は複数選択）</label>
-      <div class="ins-acc">${DB.accounts.map(a => `<label><input type="checkbox" name="accountIds" value="${esc(a.id)}" ${ids.indexOf(a.id) >= 0 ? 'checked' : ''}><span class="an">${esc(a.name)}</span><span class="am">${esc(a.platform)} / ${wan(a.followers)}</span></label>`).join('') || '<span style="font-size:12px;color:var(--cha)">アカウントが未登録です</span>'}</div></div>
+      <div class="ins-acc">${DB.accounts.map(a => `<label><input type="checkbox" name="accountIds" value="${esc(a.id)}" ${ids.indexOf(a.id) >= 0 ? 'checked' : ''}><span class="an">${esc(ellip15(a.name))}</span><span class="am">${esc(a.platform)} / ${wan(a.followers)}</span></label>`).join('') || '<span style="font-size:12px;color:var(--cha)">アカウントが未登録です</span>'}</div></div>
     <div class="field"><label>訪問日時（撮影・試食）</label><input name="visitAt" type="datetime-local" value="${esc(d.visitAt || '')}"></div>
     <div class="field"><label>投稿日 / 投稿予定日</label><input name="date" type="date" value="${esc(d.date)}"></div>
     <div class="field"><label>報酬額（税込・円）</label><input name="reward" type="number" min="0" step="1000" value="${esc(d.reward)}"></div>
@@ -1972,7 +1974,7 @@ function openCamp(id, presetAcc) {
     if (sig !== perSig) {
       perSig = sig;
       const seed = c || {}; const rw = seed.rewards || {}; const dt = seed.accDates || {};
-      perBox.innerHTML = sel.map(id => `<div class="per-row"><span class="an">${esc(accName(id))}</span>` +
+      perBox.innerHTML = sel.map(id => `<div class="per-row"><span class="an">${esc(ellip15(accName(id)))}</span>` +
         `<input data-rw="${esc(id)}" type="number" min="0" step="1000" value="${rw[id] !== undefined ? esc(rw[id]) : ''}" placeholder="報酬額">` +
         `<input data-dt="${esc(id)}" type="date" value="${esc(dt[id] || seed.date || ymd(TODAY))}"></div>`).join('');
     }
@@ -2695,7 +2697,7 @@ function renderAccounts() {
       <div style="display:flex;gap:10px;align-items:flex-start">
         <div style="flex:1;min-width:0">
           <div class="chip">${esc(a.platform)}</div>
-          <h3 style="font-size:14.5px;font-weight:900;margin-top:6px;line-height:1.45">${esc(a.name)}</h3>
+          <h3 style="font-size:14.5px;font-weight:900;margin-top:6px;line-height:1.45">${esc(ellip15(a.name))}</h3>
           <div class="num" style="font-size:11px;color:var(--cha)">${esc(a.handle)}</div>
           ${(a.url || profileUrl(a)) ? `<div class="num" style="font-size:10.5px;margin-top:3px;word-break:break-all"><a href="${esc(a.url || profileUrl(a))}" target="_blank" rel="noopener" style="color:var(--mori-3);text-decoration:underline">${esc(a.url || profileUrl(a))}</a></div>` : ''}
         </div>
@@ -3137,14 +3139,14 @@ function renderRailAccounts() {
   if (list) list.innerHTML = rows.length ? rows.map(r => `
     <button class="acc-btn ${r.on ? 'on' : ''}" data-acc-open="${esc(r.a.id)}" title="${esc(r.a.name)}">
       <span class="av">${avHTML(r.a)}</span>
-      <span class="t"><b>${esc(r.a.name)}</b><span>${esc(r.sub)}</span></span>
+      <span class="t"><b>${esc(ellip15(r.a.name))}</b><span>${esc(r.sub)}</span></span>
     </button>`).join('')
     : '<div style="font-size:11.5px;color:#9DB5AC;padding:4px 6px 2px">アカウント未登録</div>';
 
   const chips = `<button class="acc-chip ${currentView !== 'account' ? 'on' : ''}" data-view-jump="accounts">
       <span class="av">全</span><b>すべて</b><small>${DB.accounts.length}</small></button>`
     + rows.map(r => `<button class="acc-chip ${r.on ? 'on' : ''}" data-acc-open="${esc(r.a.id)}">
-      <span class="av">${avHTML(r.a)}</span><b>${esc(r.a.name)}</b><small>${esc(r.a.platform)}</small></button>`).join('');
+      <span class="av">${avHTML(r.a)}</span><b>${esc(ellip15(r.a.name))}</b><small>${esc(r.a.platform)}</small></button>`).join('');
   ['stripCamps', 'stripAcc'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = chips; });
 }
 
@@ -3922,7 +3924,7 @@ function packCampCards() {
         const ins = (by && by.posts)
           ? `<button class="ins-btn" data-ins-camp="${esc(_camp.id)}" data-ins-acc="${esc(a.id)}"><i class="insb">リーチ ${wan(by.reach)}</i><i class="insb">ER ${er2.toFixed(2)}%</i></button>`
           : `<button class="ins-btn empty" data-ins-camp="${esc(_camp.id)}" data-ins-acc="${esc(a.id)}">＋ 画像を取り込む</button>`;
-        return `<div class="pacc-b"><div class="pacc-h"><span class="acc">${esc(String(a.name).split(/[｜|]/)[0].trim())}</span><span class="pair"><span class="k">報酬額</span><b>${rw}</b></span></div>`
+        return `<div class="pacc-b"><div class="pacc-h"><span class="acc">${esc(ellip15(String(a.name).split(/[｜|]/)[0].trim()))}</span><span class="pair"><span class="k">報酬額</span><b>${rw}</b></span></div>`
           + `<div class="mcard-r"><span class="k">投稿日</span><span class="v">${esc(jYMD(dt))}</span></div>`
           + `<div class="mcard-r ins"><span class="k">インサイト情報</span><span class="v">${ins}</span></div></div>`;
       }).join('');
@@ -3935,8 +3937,8 @@ function packCampCards() {
       let accShort = '';
       if (rAcc) {
         const names = [];
-        rAcc.querySelectorAll('.v .chip').forEach(c => { const s = (c.textContent || '').split(/[｜|]/)[0].trim(); if (s) names.push(s); });
-        if (!names.length) { const c = rAcc.querySelector('.v'); if (c) { const s = (c.textContent || '').split(/[｜|]/)[0].trim(); if (s) names.push(s); } }
+        rAcc.querySelectorAll('.v .chip').forEach(c => { const s = (c.textContent || '').split(/[｜|]/)[0].trim(); if (s) names.push(ellip15(s)); });
+        if (!names.length) { const c = rAcc.querySelector('.v'); if (c) { const s = (c.textContent || '').split(/[｜|]/)[0].trim(); if (s) names.push(ellip15(s)); } }
         accShort = names.join('／');
         rAcc.remove();
       }
@@ -5072,7 +5074,7 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .pacc-b{padding:7px 0 2px;border-top:1px dashed var(--line)}
   #view-campaigns .pacc-b:first-child{border-top:0;padding-top:0}
   #view-campaigns .pacc-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:2px}
-  #view-campaigns .pacc-h .acc{font-size:11.5px;font-weight:900;color:var(--mori)}
+  #view-campaigns .pacc-h .acc{font-size:11.5px;font-weight:900;color:var(--mori);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #view-campaigns .pacc-h .pair{display:inline-flex;gap:5px;align-items:baseline}
   #view-campaigns .pacc-h b{font-family:var(--mono);font-size:12.5px}
   #view-campaigns .pacc .mcard-r{padding:1.5px 0}
