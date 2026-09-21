@@ -1015,12 +1015,13 @@ html{zoom:.7}
         Instagramは転載をレコメンド対象外に、Xはオリジナル投稿以外を新規リーチから除外。グルメ系は
         <b>実食の一次情報（自分の言葉・自分の画）</b>が最も安全で最も伸びる資産です。
       </div>
+      <div class="trend-tabs" id="trendTabs"></div>
       <div class="split">
         <div class="card"><div class="card-h"><h2>タイムライン</h2><span class="hint">新しい順</span></div>
           <div class="card-b"><div class="tline" id="newsList"></div></div></div>
         <div>
           <div class="card" style="margin-bottom:16px">
-            <div class="card-h"><h2>媒体別の要点</h2></div>
+            <div class="card-h"><h2 id="mediaHead">媒体別の要点</h2></div>
             <div class="card-b" id="mediaBox"></div>
           </div>
           <div class="card">
@@ -3565,18 +3566,40 @@ const UNIT_NOTES = `
   <p style="font-size:12.5px;margin-bottom:10px">グルメ系は<b>「再来店意欲」「予約・来店」への近さ</b>が価値になるため、単純なフォロワー単価だけでなく
   <b>保存率・シェア率・プロフィール遷移</b>を根拠に交渉すると通りやすくなります。</p>
   <div class="callout ok">交渉の型：① 実績3本の平均リーチと保存率を提示 → ② 同ジャンルの相場レンジを提示 → ③ 単価ではなく「来店・予約」への貢献で説明する。</div>`;
+let trendPlatform = 'Instagram';
+const trendPlat = n => {
+  const cand = [n.p, n.platform, n.m, n.media, n.kind];
+  for (const v of cand) {
+    const s = String(v == null ? '' : v);
+    const hit = PLATFORMS.find(x => s.toLowerCase().indexOf(x.toLowerCase()) >= 0);
+    if (hit) return hit;
+  }
+  return '';
+};
 function renderTrends() {
-  document.getElementById('newsList').innerHTML = NEWS.map(n => `
+  const sel = trendPlatform;
+  const tabEl = document.getElementById('trendTabs');
+  if (tabEl) {
+    tabEl.innerHTML = PLATFORMS.map(x => `<button type="button" class="trend-tab${x === sel ? ' on' : ''}" data-tp="${esc(x)}">${esc(x)}</button>`).join('')
+      + `<button type="button" class="trend-tab${sel === 'すべて' ? ' on' : ''}" data-tp="すべて">すべて</button>`;
+    tabEl.onclick = e => { const b = e.target.closest('[data-tp]'); if (!b) return; trendPlatform = b.dataset.tp; renderTrends(); };
+  }
+  const hit = n => sel === 'すべて' || trendPlat(n) === sel
+    || (!trendPlat(n) && (((n.t || '') + ' ' + (n.b || '') + ' ' + (n.m || '')).toLowerCase().indexOf(sel.toLowerCase()) >= 0));
+  const news = NEWS.filter(hit);
+  document.getElementById('newsList').innerHTML = news.length ? news.map(n => `
     <div class="tl-item ${n.i >= 5 ? 'big' : ''}">
       <div class="tl-date">${esc(n.d)} · ${esc(n.m)}${n.i >= 5 ? '<span class="impact">影響大</span>' : ''}</div>
       <h4>${esc(n.t)}</h4>
       <p>${esc(n.b)}</p>
       <div class="src">出典：${n.s.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>`).join(' / ')}</div>
-    </div>`).join('');
-  document.getElementById('mediaBox').innerHTML = MEDIA_POINTS.map(([m, b]) =>
+    </div>`).join('') : emptyBox(esc(sel) + ' の更新情報はまだ登録されていません。「すべて」に切り替えると全体を確認できます。');
+  const mh = document.getElementById('mediaHead');
+  if (mh) mh.textContent = sel === 'すべて' ? '媒体別の要点' : sel + ' の要点';
+  document.getElementById('mediaBox').innerHTML = MEDIA_POINTS.filter(([m]) => sel === 'すべて' || m === sel).map(([m, b]) =>
     `<div style="padding:10px 0;border-bottom:1px dashed var(--line-soft)">
       <div style="font-weight:900;font-size:12.5px">${esc(m)}</div>
-      <div style="font-size:12px;color:#3A2A31">${esc(b)}</div></div>`).join('');
+      <div style="font-size:12px;color:#3A2A31">${esc(b)}</div></div>`).join('') || '';
   document.getElementById('trendWords').innerHTML = TREND_WORDS.map(w => `<span class="chip">${esc(w)}</span>`).join('');
   document.getElementById('unitNotes').innerHTML = UNIT_NOTES;
 
@@ -3974,6 +3997,17 @@ function packCampCards() {
     card.dataset.packed = '1';
   });
 }
+/* ログアウトは「管理情報」のみ表示／指定ページでは見出し部を隠す */
+function updateChrome() {
+  const isAdmin = currentView === 'admin';
+  ['railLogout', 'topLogout'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = isAdmin ? '' : 'none'; });
+  const bare = ['campaigns', 'alerts', 'dash', 'accounts', 'trends'].indexOf(currentView) >= 0;
+  const pt = document.getElementById('pageTitle');
+  const head = pt ? pt.parentElement : null;
+  if (head) head.style.display = bare ? 'none' : '';
+  const tb = document.querySelector('.topbar') || document.querySelector('header');
+  if (tb) tb.classList.toggle('tb-bare', bare);
+}
 /* 要対応の件数があるときは「要対応」ボタンにベルを表示 */
 function updateAlertNav() {
   let n = 0;
@@ -4062,6 +4096,7 @@ function render() {
   packCampCards();
   packAlertCards();
   updateAlertNav();
+  updateChrome();
 }
 function fillSelect(el, items, allLabel) {
   el.innerHTML = `<option value="">${esc(allLabel)}</option>` + items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
@@ -5157,6 +5192,12 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-alerts .mcard-r.two .pair{display:inline-flex;gap:6px;align-items:baseline}
 }
 .nav-btn.has-alert .lb{color:var(--kohaku)}
+@media (max-width:860px){
+  .topbar.tb-bare{display:none!important}
+}
+.trend-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.trend-tab{border:1.4px solid var(--line);background:#fff;color:var(--cha);border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;min-height:36px;line-height:1.1}
+.trend-tab.on{background:var(--mori);border-color:var(--mori);color:#fff}
 .per-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 0;border-top:1px dashed var(--line)}
 .per-row:first-child{border-top:0}
 .per-row .an{font-size:11.5px;font-weight:800;flex:1 1 100%}
