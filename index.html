@@ -4717,8 +4717,10 @@ async function sbLoadWorkspaces() {
   try { sbWsCache = await sbWsList(); } catch (e) { sbWsCache = []; }
   shDrawWs();
 }
+function sbEmail(v) { const t = String(v || '').trim(); if (!t) return ''; return t.indexOf('@') >= 0 ? t : t + '@amoti.local'; }
 async function sbLogin(create) {
-  const email = (document.getElementById('sbEmail').value || '').trim();
+  const rawId = (document.getElementById('sbEmail').value || '').trim();
+  const email = sbEmail(rawId);
   const pw = document.getElementById('sbPw').value || '';
   if (!email || !pw) { shSay('<div class="callout warn">メールアドレスとパスワードを入力してください</div>'); return; }
   try {
@@ -4768,8 +4770,8 @@ function ensureSharedCard() {
   const card = document.createElement('div'); card.className = 'card'; card.id = 'sharedCard'; card.style.marginTop = '18px';
   card.innerHTML = '<div class="card-h"><h2>共有モード（複数人・複数端末で同じデータ）</h2><span class="hint">Supabase（サーバー保存）</span></div>' +
     '<div class="card-b">' +
-    '<div class="callout"><b>チームで1つのデータを共有します。</b>メールアドレスとパスワードでログインすると、データはサーバー（Supabase）に保存され、<b>どのPC・スマホからログインしても同じ内容</b>が表示されます。編集は自動送信され、開いている間は約20秒ごとに他の端末の更新を取り込みます。</div>' +
-    '<div class="field" style="margin-top:12px"><label>メールアドレス</label><input id="sbEmail" type="email" autocomplete="username" placeholder="you@example.com" value="' + esc(c.sbEmail || '') + '"></div>' +
+    '<div class="callout"><b>チームで1つのデータを共有します。</b><b>全員が同じID・パスワードを共有</b>してログインすると、データはサーバー（Supabase）に保存され、<b>どのPC・スマホからログインしても同じ内容</b>が表示されます。編集は自動送信され、開いている間は約20秒ごとに他の端末の更新を取り込みます。</div>' +
+    '<div class="field" style="margin-top:12px"><label>ID（メールアドレス、または好きなID）</label><input id="sbEmail" type="text" autocomplete="username" placeholder="例：amoti でも you@example.com でもOK" value="' + esc(c.sbEmail || '') + '"></div>' +
     '<div class="field" style="margin-top:10px"><label>パスワード（8文字以上）</label><input id="sbPw" type="password" autocomplete="current-password" placeholder="パスワード"></div>' +
     '<div class="inline" style="margin-top:12px">' +
     '<button type="button" class="btn primary" id="sbLoginBtn">ログイン</button>' +
