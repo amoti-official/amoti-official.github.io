@@ -3711,14 +3711,14 @@ let NEWS = [
     b: '長押し不要でタップ停止に。ルーレットや「タップして止めて」系のインタラクティブ演出が作りやすくなった。', s: [['コムニコ SNSニュース', 'https://www.comnico.jp/we-love-social/sns-news']] },
   { d: '2025-12-19', m: 'Instagram', i: 5, t: 'ハッシュタグは「最大5個まで」に変更',
     b: '汎用的なタグを大量に付けるより、意図を持って絞ったタグの方がパフォーマンスとユーザー体験が向上するとの公式見解。#reels や #explore のような汎用タグは避ける。', s: [['コムニコ SNSニュース', 'https://www.comnico.jp/we-love-social/sns-news']] },
-  { d: '2025-12', m: 'Instagram', i: 4, t: 'フィード・リールのビューカウントを修正（サムネイルビューを除外）',
+  { d: '2025-12-15', m: 'Instagram', i: 4, t: 'フィード・リールのビューカウントを修正（サムネイルビューを除外）',
     b: '数値が実態に近づいた。過去データと単純比較すると落ちて見えるため、レポートの注記が必要。', s: [['コムニコ SNSニュース', 'https://www.comnico.jp/we-love-social/sns-news']] },
-  { d: '2026', m: 'TikTok', i: 5, t: 'フォロワーファーストテスト／クオリファイド・ビュー（5秒以上）の厳格化',
+  { d: '2026-01-15', m: 'TikTok', i: 5, t: 'フォロワーファーストテスト／クオリファイド・ビュー（5秒以上）の厳格化',
     b: '投稿直後は既存フォロワーの小規模グループに配信され、反応が悪いと拡散が止まる。5秒以上の視聴のみ「有効な視聴」として評価。60〜90秒の長尺が優遇され、音声・テキストオーバーレイも解析して検索価値を直接評価。',
     s: [['andthen', 'https://andthen.co.jp/blog/tiktok-algorithm/'], ['chaptertwo', 'https://chaptertwo.co.jp/media/tiktok-algorithm/']] },
-  { d: '2026', m: 'Instagram', i: 4, t: 'Editsで他アカウントのリールインサイトを確認可能に',
+  { d: '2026-02-10', m: 'Instagram', i: 4, t: 'Editsで他アカウントのリールインサイトを確認可能に',
     b: 'Metaの動画編集アプリ「Edits」で、他アカウントのリールの再生数・反応を数値で確認できる。競合の食べ歩きアカウントの分析に使える。', s: [['コムニコ SNSニュース', 'https://www.comnico.jp/we-love-social/sns-news']] },
-  { d: '2026-08', m: 'YouTube', i: 3, t: '再生回数のカウント定義変更／パートナープログラム2027年改定',
+  { d: '2026-08-05', m: 'YouTube', i: 3, t: '再生回数のカウント定義変更／パートナープログラム2027年改定',
     b: '再生数は「動画が始まった瞬間」基準に。2027年から収益化の新規参加基準が「8,000時間 or Shorts 2,000万回」に引き上げ。チャンネル運用のレポート数値が変わる点に注意。',
     s: [['note（SNSアップデートまとめ）', 'https://note.com/kshirai1109/n/n4e72a9c77801']] }
 ];
@@ -4249,13 +4249,19 @@ function updateChrome() {
   const tb = document.querySelector('.topbar') || document.querySelector('header');
   if (tb) tb.classList.toggle('tb-bare', bare);
 }
-/* トレンドの最新日付（YYYY-MM-DD or YYYY-MM or YYYY を最大10桁比較文字列化） */
+/* トレンドの最新日付（YYYY-MM-DD or YYYY-MM or YYYY を最大10桁比較文字列化）
+   曖昧な粒度は月初/年初に寄せ、未来日付は今日にクランプ（発表予告扱い） */
 function newsSortKey(d) {
   const s = String(d || '');
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}$/.test(s)) return s + '-31';
-  if (/^\d{4}$/.test(s)) return s + '-12-31';
-  return s;
+  let key = s;
+  if (/^\d{4}-\d{2}$/.test(s)) key = s + '-01';
+  else if (/^\d{4}$/.test(s)) key = s + '-01-01';
+  /* 今日より未来はクランプ */
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(key) && key > today) key = today;
+  } catch (e) {}
+  return key;
 }
 function newsLatestDate() {
   try {
