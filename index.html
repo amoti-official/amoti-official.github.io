@@ -2143,7 +2143,7 @@ function invoiceBody(c, accId) {
     <table>
       <thead><tr><th>品名</th><th class="r" style="width:64px">数量</th><th class="r" style="width:120px">単価</th><th class="r" style="width:120px">金額</th></tr></thead>
       <tbody>
-        <tr><td>${esc(c.title)}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type)}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
+        <tr><td>${esc(c.title || c.client || '（案件名未設定）')}<div style="font-size:10.5px;color:#6B5A62">${esc(c.type || '')}${c.date ? ' / 掲載 ' + esc(jYMD(c.date)) : ''}${acc ? ' / ' + esc(acc.name) : ''}</div></td>
           <td class="r">1</td><td class="r">${yen(sub)}</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">小計</td><td class="r">${yen(sub)}</td></tr>
         <tr><td colspan="3" class="r">消費税（${rate}%）</td><td class="r">${yen(tax)}</td></tr>
@@ -2226,8 +2226,8 @@ function invoiceJpeg(c, accId) {
   txt('金額', c4 - 16, ty + 31, 17, '#231018', '700', null, 'right');
   const IT = 118, SH = 48;
   let ry = ty + HDR;
-  txt(c.title, TX + 16, ry + 42, 20, '#231018', '700');
-  txt(c.type + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
+  txt(c.title || c.client || '（案件名未設定）', TX + 16, ry + 42, 20, '#231018', '700');
+  txt((c.type || '') + (c.date ? ' / 掲載 ' + jYMD(c.date) : ''), TX + 16, ry + 70, 15, '#6B5A62');
   if (acc) txt(acc.name, TX + 16, ry + 96, 15, '#6B5A62');
   txt('1', c3 - 30, ry + 58, 19, '#231018', null, null, 'right');
   txt(yen(sub), c4 - 130, ry + 58, 19, '#231018', null, null, 'right');
