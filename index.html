@@ -1198,7 +1198,8 @@ window.addEventListener('error', function (e) {
   try {
     var d = document.getElementById('jsErrBar');
     if (!d) { d = document.createElement('div'); d.id = 'jsErrBar'; d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#7a1f2b;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap'; document.body.appendChild(d); }
-    d.textContent = 'JSエラー: ' + (e.message || (e.error && e.error.message) || '') + '  @' + (e.lineno || '?') + ':' + (e.colno || '?') + '（この行をコピーしてご連絡ください）';
+    var _st = (e.error && e.error.stack) ? String(e.error.stack).split('\n').slice(0, 4).join(' ← ') : '';
+    d.textContent = 'JSエラー: ' + (e.message || (e.error && e.error.message) || '') + '  @' + (e.lineno || '?') + ':' + (e.colno || '?') + (e.filename ? ' [' + String(e.filename).split('/').pop() + ']' : '') + (_st ? ' ｜ ' + _st : '') + '（この行をコピーしてご連絡ください）';
   } catch (x) {}
 });
 
