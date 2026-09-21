@@ -1528,6 +1528,7 @@ const VIEW_TITLES = {
 };
 function go(view) {
   currentView = view;
+  document.body.dataset.view = view;
   document.querySelectorAll('.view').forEach(v => v.hidden = true);
   document.getElementById('view-' + view).hidden = false;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.view === view));
@@ -5500,13 +5501,13 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .st-chips{display:flex;flex-wrap:wrap;gap:6px;padding-top:6px}
 .st-chip{border:1.4px solid var(--line);background:#fff;color:var(--cha);border-radius:999px;padding:6px 13px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;min-height:34px;line-height:1.1}
 .st-chip.on{border-color:var(--mori)}
-/* 追尾型「＋」案件登録 FAB（右下・常時追尾／PWA safe-area対応／モバイル下部ナビ回避） */
-.fab-add{position:fixed;right:calc(env(safe-area-inset-right, 0px) + 20px);bottom:calc(env(safe-area-inset-bottom, 0px) + 22px);width:60px;height:60px;border-radius:50%;background:var(--mori);color:#fff;border:0;font-size:30px;font-weight:700;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.10);cursor:pointer;z-index:9500;display:flex;align-items:center;justify-content:center;padding:0;font-family:inherit;transition:transform .15s ease, box-shadow .15s ease}
+/* 追尾型「＋」案件登録 FAB
+   規定は非表示。モバイル (<=860px) かつ 案件管理ビュー時のみ表示。 */
+.fab-add{display:none;position:fixed;right:calc(env(safe-area-inset-right, 0px) + 16px);bottom:calc(env(safe-area-inset-bottom, 0px) + 120px);width:56px;height:56px;border-radius:50%;background:var(--mori);color:#fff;border:0;font-size:28px;font-weight:700;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.10);cursor:pointer;z-index:9500;align-items:center;justify-content:center;padding:0;font-family:inherit;transition:transform .15s ease, box-shadow .15s ease}
 .fab-add:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.22),0 3px 8px rgba(0,0,0,.12)}
 .fab-add:active{transform:translateY(0);box-shadow:0 3px 10px rgba(0,0,0,.20)}
 .fab-add:focus-visible{outline:3px solid var(--kohaku);outline-offset:3px}
-/* タブレット〜スマホ：下部タブバー（rail: 2段構成・実測 ~84px + safe-area）の上に浮かせる */
-@media (max-width:860px){.fab-add{width:56px;height:56px;font-size:28px;right:calc(env(safe-area-inset-right, 0px) + 16px);bottom:calc(env(safe-area-inset-bottom, 0px) + 96px)}}
+@media (max-width:860px){body[data-view="campaigns"] .fab-add{display:flex}}
 </style>
 <div id="devPreview" aria-hidden="true">
   <div class="dev-box">
