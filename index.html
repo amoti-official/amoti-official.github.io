@@ -4587,6 +4587,7 @@ const SB_URL = 'https://nqvgbejvrpwestkdqvav.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xdmdiZWp2cnB3ZXN0a2RxdmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4OTU2MDMsImV4cCI6MjEwNTQ3MTYwM30.2Sx7PjUMQbYtKunGRIjen_KYSNEMEjd-gRWuUXep5b4';
 const SB_ROW = 'team';
 const SB_VER = 'v3';
+const SB_BUILD = '20260921-0148Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
@@ -4615,6 +4616,27 @@ async function sbSaveState(state) {
 }
 function shReady() { return true; }
 function shSay(h) { const el = document.getElementById('shMsg'); if (el) el.innerHTML = h; }
+function sbForceUpdate() {
+  try {
+    fetch(location.pathname, { cache: 'reload' }).then(function () { location.reload(); }).catch(function () { location.reload(); });
+  } catch (e) { location.reload(); }
+}
+async function sbCheckUpdate() {
+  try {
+    if (document.hidden) return;
+    const r = await fetch(location.pathname + '?_u=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const t = await r.text();
+    const m = t.match(/SB_BUILD = '([^']+)'/);
+    if (!m || m[1] === SB_BUILD) return;
+    if (sbBusy()) return;
+    const last = Number(sessionStorage.getItem('sbReload') || 0);
+    if (Date.now() - last < 60000) return;
+    sessionStorage.setItem('sbReload', String(Date.now()));
+    await fetch(location.pathname, { cache: 'reload' });
+    location.reload();
+  } catch (e) {}
+}
 function sbBusy() {
   try {
     const a = document.activeElement;
@@ -4718,22 +4740,26 @@ function ensureSharedCard() {
   const host = anchor.closest('.card'); if (!host) return;
   if (document.getElementById('sharedCard')) { shInfo(); return; }
   const card = document.createElement('div'); card.className = 'card'; card.id = 'sharedCard'; card.style.marginTop = '18px';
-  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">v3・設定は不要</span></div>' +
+  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">自動更新・設定は不要</span></div>' +
     '<div class="card-b">' +
     '<div class="callout"><b>IDもパスワードもワークスペース作成も不要です。</b>このアプリを開いているだけで、編集した内容は自動でサーバーへ保存され、他のPC・スマホと同じデータになります（開いている間は約20秒ごとに取り込み、タブに戻ったときにも同期します）。</div>' +
     '<div class="inline" style="margin-top:12px">' +
     '<button type="button" class="btn primary" id="shNow">今すぐ同期</button>' +
     '<button type="button" class="btn" id="shPush">この端末の内容をサーバーへ送る</button>' +
-    '<button type="button" class="btn ghost" id="shPull">サーバーの内容を取り込む</button></div>' +
+    '<button type="button" class="btn ghost" id="shPull">サーバーの内容を取り込む</button>' +
+    '<button type="button" class="btn ghost" id="shUpd">最新版に更新</button></div>' +
     '<div id="shMsg" style="margin-top:12px;font-size:12px"></div>' +
     '</div>';
   host.parentNode.insertBefore(card, host);
   document.getElementById('shNow').onclick = function () { shSync(true); };
   document.getElementById('shPush').onclick = function () { shPushNow(); };
   document.getElementById('shPull').onclick = function () { shSync(true); };
+  document.getElementById('shUpd').onclick = function () { sbForceUpdate(); };
   shInfo();
 }
 function sbInit() { setTimeout(function () { try { shSync(false); } catch (e) {} }, 800); }
+setInterval(function () { try { sbCheckUpdate(); } catch (e) {} }, 300000);
+setTimeout(function () { try { sbCheckUpdate(); } catch (e) {} }, 4000);
 window.addEventListener('visibilitychange', function () { if (!document.hidden) { try { shSync(false); } catch (e) {} } });
 sbInit();
 /* === END_AMOTI_SUPABASE === */
