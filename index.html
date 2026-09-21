@@ -1016,17 +1016,12 @@ html{zoom:.7}
         <div class="card-b" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px">
           <span style="font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mori-3);background:var(--mori-pale);padding:3px 8px;border-radius:999px">🤖 AI トレンドレポート</span>
           <span id="trendScanStatus" style="font-size:12.5px;color:var(--cha);flex:1;min-width:180px"></span>
-          <button type="button" class="btn sm ghost" id="trendScanBtn">最新を取得</button>
         </div>
         <div style="padding:0 14px 12px;font-size:10.5px;color:var(--cha);line-height:1.6">
-          Genspark Workflows が毎朝8時（JST）にWeb検索でSNS仕様変更を収集し、Supabase に保存 → このアプリが読み込みます。
+          Genspark Workflows が毎朝8時（JST）にWeb検索でSNS仕様変更を収集し、Supabase に保存 → このアプリを開くと自動で読み込みます。
         </div>
       </div>
-      <div class="callout" style="margin-bottom:18px">
-        <b>運用の結論：</b>2026年は「投稿量」より<b>オリジナル性と保存・シェア</b>の年。
-        Instagramは転載をレコメンド対象外に、Xはオリジナル投稿以外を新規リーチから除外。グルメ系は
-        <b>実食の一次情報（自分の言葉・自分の画）</b>が最も安全で最も伸びる資産です。
-      </div>
+      <div class="callout" id="trendConclusion" style="margin-bottom:18px"></div>
       <div class="trend-tabs" id="trendTabs"></div>
       <div class="split">
         <div class="card"><div class="card-h"><h2>タイムライン</h2><span class="hint">新しい順</span></div>
@@ -3729,6 +3724,20 @@ const MEDIA_POINTS = [
   ['X', 'オリジナル投稿のみがフォロワー外へ。会話（返信・引用）とリンク共有が評価の中心。'],
   ['Threads', '会話が起点。短い気づき＋写真を高頻度で。プロフィール運用で優先ツールが使える。']
 ];
+/* 運用の結論：SNSタブ別 or 全体総論 */
+const CONCLUSION_ALL = '2026年は「投稿量」より<b>オリジナル性と保存・シェア</b>の年。Instagramは転載をレコメンド対象外に、Xはオリジナル投稿以外を新規リーチから除外。グルメ系は<b>実食の一次情報（自分の言葉・自分の画）</b>が最も安全で最も伸びる資産です。';
+const CONCLUSION_BY = {
+  'Instagram': '<b>Instagram：</b>投稿量より<b>オリジナル性</b>。転載アカウントは全フォーマットでおすすめ対象外。保存とシェア（特にリールの再シェア）が最重要指標。ハッシュタグは<b>最大5個まで</b>で、汎用タグは避けて意図を持って絞る。',
+  'TikTok': '<b>TikTok：</b>投稿直後は既存フォロワーでテスト配信。<b>5秒未満はほぼ無価値</b>、<b>60〜90秒の長尺</b>で音声・テキストに検索価値を持たせる。TikTok Shopの日次投稿上限にも注意。',
+  'YouTube': '<b>YouTube：</b>長尺は資産になるが、<b>2027年から収益化条件が厳格化</b>（8,000時間 or Shorts 2,000万回）。レビュー動画は「<b>店名＋エリア＋料理名</b>」をタイトルと概要欄に明記して検索流入を狙う。',
+  'X': '<b>X（旧Twitter）：</b>フォロワー外へ届くのは<b>オリジナル投稿のみ</b>。返信・引用・リンク共有の会話評価が「いいね」より突出。リポストや自動返信はおすすめ候補に入らない。',
+  'Threads': '<b>Threads：</b>会話が起点。<b>短い気づき＋写真</b>を高頻度で。Author tag と AI 分析でクリエイター機能が拡充。プロフィール運用で優先ツールが使えるようになった。'
+};
+function trendConclusionHTML(p) {
+  if (!p || p === 'すべて') return '<b>運用の結論：</b>' + CONCLUSION_ALL;
+  const c = CONCLUSION_BY[p];
+  return c ? ('<b>運用の結論（' + esc(p) + '）：</b>' + c.replace('<b>' + p + '：</b>', '')) : ('<b>運用の結論：</b>' + CONCLUSION_ALL);
+}
 const TREND_WORDS = ['胡椒餅', '豆皿定食', '中華アフヌン', 'ヨアジョン（冷凍ヨーグルト）', 'ネオ和菓子（炙り生餅・発酵餡パフェ）', 'エンジェルヘアーチョコ', 'フルーツそっくりスイーツ', '酸・辛・香（さんしんこう）グルメ', '麻辣湯', 'AIフード（透明プリン）', 'サゴ'];
 const COMPLIANCE = [
   ['「#PR」または「#広告」を、投稿の冒頭（「もっと見る」を開く前に見える位置）に記載した', '冒頭・明瞭が原則。末尾や小さい表記は不十分とされる'],
@@ -3761,30 +3770,18 @@ function renderTrends() {
   /* AI分析ステータスバー */
   try {
     const st = document.getElementById('trendScanStatus');
-    const btn = document.getElementById('trendScanBtn');
     if (st) {
       const latest = newsLatestDate();
-      const scannedAt = (DB.trends && DB.trends.scannedAt) || '';
+      const scannedAt = (DB.trends && DB.trends.aiScannedAt) || (DB.trends && DB.trends.scannedAt) || '';
       const scanFmt = scannedAt ? new Date(scannedAt).toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '未実行';
-      st.innerHTML = '最終分析：<b>' + esc(scanFmt) + '</b>　／　最新記事：<b>' + esc(latest || '—') + '</b>　（記事数 ' + (NEWS || []).length + ' 件）';
+      st.innerHTML = '最終取得：<b>' + esc(scanFmt) + '</b>　／　最新記事：<b>' + esc(latest || '—') + '</b>　（記事数 ' + (NEWS || []).length + ' 件）';
     }
-    if (btn && !btn.dataset.wired) {
-      btn.dataset.wired = '1';
-      btn.onclick = async () => {
-        btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Supabase から取得中…';
-        try {
-          _trendsMerged = false; /* 再取得を許可 */
-          const added = await refreshTrends();
-          DB.trends = DB.trends || {};
-          DB.trends.scannedAt = new Date().toISOString();
-          save();
-          if (added > 0) toast('AI トレンドレポート：新しい記事を ' + added + ' 件取得しました');
-          else toast('AI トレンドレポート：新しい記事はありません');
-          renderTrends();
-          updateTrendsNav();
-        } catch (e) { toast('取得に失敗しました：' + (e && e.message || e)); }
-        btn.disabled = false; btn.textContent = orig;
-      };
+  } catch (e) {}
+  /* 運用の結論：SNSタブに応じて内容を切り替え */
+  try {
+    const cc = document.getElementById('trendConclusion');
+    if (cc) {
+      cc.innerHTML = trendConclusionHTML(trendPlatform);
     }
   } catch (e) {}
   const sel = trendPlatform;
