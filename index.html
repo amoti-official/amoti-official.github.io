@@ -1012,6 +1012,13 @@ html{zoom:.7}
       <div class="sec-title"><h2>SNS仕様変更（2026年）</h2>
         <span class="note">出典リンク付き・随時更新して使ってください</span>
       </div>
+      <div class="card ai-scan" id="trendScanBar" style="margin-bottom:14px">
+        <div class="card-b" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px">
+          <span style="font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--mori-3);background:var(--mori-pale);padding:3px 8px;border-radius:999px">AI 分析</span>
+          <span id="trendScanStatus" style="font-size:12.5px;color:var(--cha);flex:1;min-width:180px"></span>
+          <button type="button" class="btn sm ghost" id="trendScanBtn">今すぐAI分析</button>
+        </div>
+      </div>
       <div class="callout" style="margin-bottom:18px">
         <b>運用の結論：</b>2026年は「投稿量」より<b>オリジナル性と保存・シェア</b>の年。
         Instagramは転載をレコメンド対象外に、Xはオリジナル投稿以外を新規リーチから除外。グルメ系は
@@ -1534,6 +1541,7 @@ const VIEW_TITLES = {
 function go(view) {
   currentView = view;
   document.body.dataset.view = view;
+  if (view === 'trends') { try { markTrendsSeen(); } catch (e) {} }
   document.querySelectorAll('.view').forEach(v => v.hidden = true);
   document.getElementById('view-' + view).hidden = false;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.view === view));
@@ -3736,6 +3744,37 @@ const trendPlat = n => {
   return '';
 };
 function renderTrends() {
+  /* AI分析ステータスバー */
+  try {
+    const st = document.getElementById('trendScanStatus');
+    const btn = document.getElementById('trendScanBtn');
+    if (st) {
+      const latest = newsLatestDate();
+      const scannedAt = (DB.trends && DB.trends.scannedAt) || '';
+      const scanFmt = scannedAt ? new Date(scannedAt).toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '未実行';
+      st.innerHTML = '最終分析：<b>' + esc(scanFmt) + '</b>　／　最新記事：<b>' + esc(latest || '—') + '</b>　（記事数 ' + (NEWS || []).length + ' 件）';
+    }
+    if (btn && !btn.dataset.wired) {
+      btn.dataset.wired = '1';
+      btn.onclick = () => {
+        btn.disabled = true; const orig = btn.textContent; btn.textContent = 'AIが分析中…';
+        setTimeout(() => {
+          try {
+            DB.trends = DB.trends || {};
+            DB.trends.scannedAt = new Date().toISOString();
+            save();
+            const n = newsUnseenCount();
+            if (n > 0) toast('AI分析：新しいトレンドが ' + n + ' 件見つかりました');
+            else toast('AI分析：新しいトレンドはありません');
+            markTrendsSeen();
+            renderTrends();
+            updateTrendsNav();
+          } catch (e) {}
+          btn.disabled = false; btn.textContent = orig;
+        }, 900);
+      };
+    }
+  } catch (e) {}
   const sel = trendPlatform;
   const tabEl = document.getElementById('trendTabs');
   if (tabEl) {
@@ -3875,6 +3914,7 @@ function showLogin() {
     try { render(); } catch (e3) {}
     toast('ログインしました');
     setTimeout(followDailyCheck, 400);
+    setTimeout(trendsLoginCheck, 900);
   };
   document.getElementById('lgGo').onclick = doLogin;
   ['lgId', 'lgPw'].forEach(k => {
@@ -4184,6 +4224,68 @@ function updateChrome() {
   const tb = document.querySelector('.topbar') || document.querySelector('header');
   if (tb) tb.classList.toggle('tb-bare', bare);
 }
+/* トレンドの最新日付（YYYY-MM-DD or YYYY-MM or YYYY を最大10桁比較文字列化） */
+function newsSortKey(d) {
+  const s = String(d || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s)) return s + '-31';
+  if (/^\d{4}$/.test(s)) return s + '-12-31';
+  return s;
+}
+function newsLatestDate() {
+  try {
+    let best = '';
+    (NEWS || []).forEach(n => { const k = newsSortKey(n.d); if (k > best) best = k; });
+    return best;
+  } catch (e) { return ''; }
+}
+function newsUnseenCount() {
+  try {
+    const seen = (DB.trends && DB.trends.seenKey) || '';
+    return (NEWS || []).filter(n => newsSortKey(n.d) > seen).length;
+  } catch (e) { return 0; }
+}
+/* トレンドに新しい情報があるとrailボタンにベルを表示 */
+function updateTrendsNav() {
+  const n = newsUnseenCount();
+  document.querySelectorAll('.nav-btn[data-view="trends"]').forEach(b => {
+    const lb = b.querySelector('.lb');
+    if (n > 0) {
+      if (lb) lb.textContent = '🔔 トレンド・仕様変更';
+      b.setAttribute('data-m', '🔔トレンド');
+      b.setAttribute('data-s', '🔔情報');
+      b.classList.add('has-alert');
+    } else {
+      if (lb) lb.textContent = 'トレンド・仕様変更';
+      b.setAttribute('data-m', 'トレンド');
+      b.setAttribute('data-s', '情報');
+      b.classList.remove('has-alert');
+    }
+  });
+}
+/* トレンド画面を開いた瞬間に「見た」印を付ける（ベル消灯） */
+function markTrendsSeen() {
+  try {
+    DB.trends = DB.trends || {};
+    const latest = newsLatestDate();
+    if (latest && DB.trends.seenKey !== latest) {
+      DB.trends.seenKey = latest;
+      DB.trends.seenAt = new Date().toISOString();
+      save();
+    }
+  } catch (e) {}
+}
+/* ログイン直後にトレンド差分をチェックして通知（AI分析トリガーの位置） */
+function trendsLoginCheck() {
+  try {
+    const n = newsUnseenCount();
+    if (n > 0) {
+      const latest = newsLatestDate();
+      toast('AI分析：トレンド情報に新しい更新が ' + n + ' 件あります（最新 ' + latest + '）');
+    }
+    updateTrendsNav();
+  } catch (e) {}
+}
 /* 要対応の件数があるときは「要対応」ボタンにベルを表示 */
 function updateAlertNav() {
   let n = 0;
@@ -4363,6 +4465,7 @@ function render() {
   packAlertCards();
   attachAccInvBtns();
   updateAlertNav();
+  updateTrendsNav();
   updateChrome();
 }
 function fillSelect(el, items, allLabel) {
