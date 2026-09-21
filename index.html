@@ -4592,8 +4592,9 @@ let _snap2 = null;
 function sbNow() { return Date.now() + _skew; }
 function sbDigest(r) { const o = Object.assign({}, r); delete o._t; return JSON.stringify(o); }
 function sbFixTs(o) {
-  const cap = sbNow() + 600000;
-  const fix = function (v) { const n = Number(v) || 0; return n > cap ? cap : n; };
+  const cap = sbNow() + 2000;
+  const floor = sbNow() - 60000;
+  const fix = function (v) { const n = Number(v) || 0; return n > cap ? floor : n; };
   try {
     if (o.tombs) Object.keys(o.tombs).forEach(function (k) { o.tombs[k] = fix(o.tombs[k]); });
     const recs = recSplit(o);
