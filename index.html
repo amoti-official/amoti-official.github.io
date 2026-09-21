@@ -1343,8 +1343,10 @@ function normalize(d) {
     if ((!c.genre || c.genre === '未設定') && c.type && GENRES.indexOf(c.type) >= 0) {
       c.genre = c.type;
     }
-    /* c.type は今後使わないので削除（レンダリングフォールバックの誤動作を防ぐ） */
-    if (c.type !== undefined) { try { delete c.type; } catch (e) { c.type = ''; } }
+    /* c.type は今後使わない。削除ではなく空文字で上書きする（recFieldMerge が「あるフィールド vs 無いフィールド」を「あるほう」で復活させてしまう問題への対策）。
+       あわせて _ft.type / _ft.rewards.type などの旧タイムスタンプメタも掃除する */
+    c.type = '';
+    if (c._ft && typeof c._ft === 'object') { try { delete c._ft.type; } catch (e) {} }
     if (!c.genre) c.genre = '未設定';
     if (!c.priceRange) c.priceRange = '未設定';
     return c;
@@ -1357,6 +1359,8 @@ function storageOK() {
 }
 function save() {
   if (window.__PV) return;   // プレビュー内の操作は保存しない
+  /* 保存前に必ず正規化：旧 c.type を空文字に上書きし、genre/priceRange のデフォルトを保証 */
+  try { DB = normalize(DB); } catch (e) {}
   try { recStamp(); } catch (e) {}
   try { DB.savedAt = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(DB)); }
   catch (e) {
@@ -2122,10 +2126,11 @@ function openCamp(id, presetAcc, opts) {
     }
     if (c) {
       Object.assign(c, data);
-      /* 旧 c.type が生き残っていると表示にフォールバックしてしまうので確実に消す */
-      if (c.type !== undefined) { try { delete c.type; } catch (e) { c.type = ''; } }
+      /* 旧 c.type は空文字で上書きし、Supabase 同期時に必ず最新スタンプが付くようにする（削除だとremoteの古い値が復活してしまう） */
+      c.type = '';
+      if (c._ft && typeof c._ft === 'object') { try { delete c._ft.type; } catch (e) {} }
     } else {
-      DB.campaigns.push(Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data));
+      DB.campaigns.push(Object.assign({ id: uid('c'), invoicedAt: '', dropped: false, type: '' }, data));
     }
     save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
   };
@@ -5325,8 +5330,10 @@ async function shSync(manual) {
 
     let db = DB, got = 0;
     if (remote) {
+      try { remote = normalize(remote); } catch (e) {}
       const before = JSON.stringify(recSplit(DB));
       db = recMerge(DB, remote);
+      try { db = normalize(db); } catch (e) {}
       if (JSON.stringify(recSplit(db)) !== before) got = 1;
     }
     const payload = Object.assign({}, db, { api: {} });
@@ -5647,8 +5654,12 @@ async function shSync(manual) {
       DB.api.sbIn = inc;
     } catch (e) {}
     if (remote) {
+      /* remote 側も先に正規化して、旧 c.type='PR案件' が復活しないようにする */
+      try { remote = normalize(remote); } catch (e) {}
       const before = sbCanon(recSplit(db));
       db = recMerge(db, remote);
+      /* マージ直後も正規化 */
+      try { db = normalize(db); } catch (e) {}
       if (sbCanon(recSplit(db)) !== before) got = 1;
     }
     const payload = Object.assign({}, db, { api: {} });
