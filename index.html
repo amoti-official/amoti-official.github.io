@@ -4700,6 +4700,7 @@ function sbForceUpdate() {
 async function sbCheckUpdate() {
   try {
     if (document.hidden) return;
+    if (window.__AMOTI_SUSPEND) return;
     const r = await fetch(location.pathname + '?_u=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) return;
     const t = await r.text();
@@ -4747,6 +4748,7 @@ function shInfo() {
   if (ap) ap.onclick = function () { sbApplyPending(); };
 }
 async function shSync(manual) {
+  if (window.__AMOTI_SUSPEND) return;
   if (_inSync && (Date.now() - _inSyncAt) < 30000) return;
   _inSync = true; _inSyncAt = Date.now();
   try {
@@ -4865,6 +4867,60 @@ go(VIEW_TITLES[h] ? h : 'dash');
 })();
 
 
+</script>
+
+<style id="devToggleCss">
+#devToggle{position:fixed;left:14px;bottom:14px;z-index:9000;display:none;padding:11px 16px;font-size:13px;font-weight:700;
+  line-height:1;border-radius:999px;border:1px solid rgba(0,0,0,.16);background:#fff;color:#222;cursor:pointer;
+  box-shadow:0 3px 12px rgba(0,0,0,.20);font-family:inherit;align-items:center;gap:6px}
+#devToggle:hover{background:#f4f4f4}
+@media (min-width:861px){#devToggle{display:inline-flex}}
+#devPreview{display:none;position:fixed;inset:0;z-index:9500;background:rgba(20,20,24,.55);
+  align-items:center;justify-content:center;padding:16px}
+#devPreview.on{display:flex}
+#devPreview .dev-box{background:#fff;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.45);overflow:hidden;
+  display:flex;flex-direction:column;max-height:96vh}
+#devPreview .dev-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 14px;background:#1e1e22;color:#fff;font-size:12px;font-weight:700}
+#devPreview .dev-bar button{padding:7px 12px;font-size:12px;font-weight:700;border-radius:999px;border:1px solid rgba(255,255,255,.35);
+  background:transparent;color:#fff;cursor:pointer;font-family:inherit}
+#devPreview .dev-bar button:hover{background:rgba(255,255,255,.12)}
+#devPreview .dev-phone{width:390px;height:844px;max-height:calc(96vh - 44px);background:#fff;position:relative}
+#devPreview .dev-phone iframe{width:390px;height:100%;border:0;display:block}
+</style>
+<button type="button" id="devToggle"><span>スマホ表示</span></button>
+<div id="devPreview" aria-hidden="true">
+  <div class="dev-box">
+    <div class="dev-bar"><span>スマホ表示（390 × 844）</span><button type="button" id="devClose">PC表示に戻す</button></div>
+    <div class="dev-phone"><iframe id="devFrame" title="スマホ表示プレビュー"></iframe></div>
+  </div>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('devToggle');
+  var ov = document.getElementById('devPreview');
+  var fr = document.getElementById('devFrame');
+  if (!btn || !ov || !fr) return;
+  var opened = false;
+  function openIt() {
+    if (!fr.getAttribute('src')) { fr.setAttribute('src', location.pathname + location.search + location.hash); }
+    ov.className = 'on'; ov.setAttribute('aria-hidden', 'false');
+    window.__AMOTI_SUSPEND = true; opened = true;
+    document.documentElement.style.overflow = 'hidden';
+    btn.querySelector('span').textContent = 'PC表示に戻す';
+  }
+  function closeIt() {
+    ov.className = ''; ov.setAttribute('aria-hidden', 'true');
+    window.__AMOTI_SUSPEND = false;
+    document.documentElement.style.overflow = '';
+    btn.querySelector('span').textContent = 'スマホ表示';
+    if (opened) { try { location.reload(); return; } catch (e) {} }
+    opened = false;
+  }
+  btn.addEventListener('click', function () { if (ov.className === 'on') { closeIt(); } else { openIt(); } });
+  document.getElementById('devClose').addEventListener('click', closeIt);
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && ov.className === 'on') closeIt(); });
+})();
 </script>
 </body>
 </html>
