@@ -736,9 +736,14 @@ html{zoom:.7}
   .rail{flex-direction:column;align-items:stretch;gap:7px;padding:9px 9px calc(9px + env(safe-area-inset-bottom));}
   .rail-primary,.rail-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%;padding:0;border:0;background:transparent;overflow:visible}
   .nav-btn[data-view="insights"]{display:none}
+  /* 上段（rail-primary）: 案件管理 → スケジュール → 収支/要確認 */
   .nav-btn[data-view="campaigns"]{order:1}
-  .nav-btn[data-view="dash"]{order:2}
-  .nav-btn[data-view="schedule"]{order:3}
+  .nav-btn[data-view="schedule"]{order:2}
+  .nav-btn[data-view="dash"]{order:3}
+  /* 下段（rail-nav）: トレンド → アカウント管理 → 管理情報 */
+  .nav-btn[data-view="trends"]{order:1}
+  .nav-btn[data-view="accounts"]{order:2}
+  .nav-btn[data-view="admin"]{order:3}
   .nav-btn{flex:0 0 auto;min-width:0;min-height:46px;border-radius:15px;border:1.5px solid rgba(216,30,79,.16);
     background:linear-gradient(180deg,#FFFFFF 0%,#FFF3F7 100%);color:#7A0E2A;font-size:12px;font-weight:800;letter-spacing:0;
     padding:6px 3px;gap:3px;justify-content:center;align-items:center;
@@ -926,13 +931,8 @@ html{zoom:.7}
 
     <!-- ---------- 03.5 アカウント詳細 ---------- -->
     <section class="view" id="view-account" hidden>
-      <div class="acc-strip" id="stripAcc"></div>
       <div class="inline" style="margin-bottom:14px">
         <button class="btn sm" id="adBack">← アカウント一覧</button>
-        <button class="btn sm" id="adToInsights" style="margin-left:auto">この投稿を分析する</button>
-      </div>
-      <div class="sec-title"><h2 id="adName">—</h2>
-        <span class="note" id="adMeta"></span>
       </div>
       <div class="tape-top"></div>
       <div class="tape"><div class="kpis" id="adKpis"></div></div>
@@ -947,21 +947,18 @@ html{zoom:.7}
         <div class="card-b"><div id="adFollow"></div></div>
       </div>
 
-      <div class="split" style="margin-top:22px">
+      <div style="margin-top:22px">
         <div class="card"><div class="card-h"><h2>投稿ごとのリーチとER</h2><span class="hint">古い → 新しい</span></div>
           <div class="card-b"><div id="adChart"></div></div></div>
-        <div class="card"><div class="card-h"><h2>形式別 平均ER</h2><span class="hint">このアカウント内</span></div>
-          <div class="card-b"><div id="adFormat"></div></div></div>
       </div>
 
-      <div class="sec-title"><h2>ハッシュタグ別 平均リーチ</h2><span class="note">このアカウント内</span></div>
-      <div class="card"><div class="card-b"><div id="adTags"></div></div></div>
-
-      <div class="sec-title"><h2>投稿ログ</h2><span class="note" id="adPostBrief"></span></div>
-      <div class="card"><div class="tw" id="adPosts"></div></div>
-
-      <div class="sec-title"><h2>アカウント情報</h2><span class="note">編集・削除</span></div>
-      <div class="card"><div class="card-b" id="adInfo"></div></div>
+      <details class="card ad-posts-ac" id="adPostsAc" style="margin-top:22px" open>
+        <summary class="card-h" style="cursor:pointer;list-style:none">
+          <h2 style="display:inline-flex;align-items:center;gap:8px">投稿ログ<span class="ac-caret" aria-hidden="true">▾</span></h2>
+          <span class="note" id="adPostBrief" style="margin-left:auto"></span>
+        </summary>
+        <div class="tw" id="adPosts"></div>
+      </details>
     </section>
 
     <!-- ---------- 04 インサイト ---------- -->
@@ -2882,7 +2879,8 @@ function renderAccounts() {
     const saver = recent.length ? recent.reduce((s, p) => s + metrics(p).save, 0) / recent.length : 0;
     const dl1 = followDelta(a.id, 1);
     return `<article class="card" data-acc-open="${esc(a.id)}" style="cursor:pointer"><div class="card-b">
-      <div style="display:flex;gap:10px;align-items:flex-start">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <span class="av acc-av" aria-hidden="true">${avHTML(a)}</span>
         <div style="flex:1;min-width:0">
           <div class="chip">${esc(a.platform)}</div>
           <h3 style="font-size:14.5px;font-weight:900;margin-top:6px;line-height:1.45">${esc(accLabel(a.name))}</h3>
@@ -3455,63 +3453,41 @@ function openAccountDetail(id) { currentAccount = id; go('account'); }
 function renderAccountDetail() {
   const a = accById(currentAccount);
   if (!a) { currentView = 'accounts'; go('accounts'); return; }
-  document.getElementById('adName').textContent = a.name;
-  document.getElementById('adMeta').textContent =
-    `${a.platform}${a.handle ? ' · ' + a.handle : ''}${a.genre ? ' · ' + a.genre : ''}`;
+  const _set = (id, val, prop) => { const el = document.getElementById(id); if (el) el[prop || 'textContent'] = val; };
 
   const posts = DB.posts.filter(p => p.accountId === a.id)
     .sort((x, y) => (parseD(x.date)?.getTime() || 0) - (parseD(y.date)?.getTime() || 0));
   const recent = posts.filter(p => parseD(p.date) >= dAgo(90));
   const sum = k => recent.reduce((s, p) => s + (Number(p[k]) || 0), 0);
-  const avg = f => recent.length ? recent.reduce((s, p) => s + f(p), 0) / recent.length : 0;
 
   const series = followSeries(a.id);
   const dl1 = followDelta(a.id, 1), dl7 = followDelta(a.id, 7), dl30 = followDelta(a.id, 30);
   const sign = n => (n >= 0 ? '＋' : '−') + nf(Math.abs(n));
-  document.getElementById('adFollowHint').textContent = series.length
-    ? `${series[0].d} 〜 ${series[series.length - 1].d} · 記録 ${series.length}日分` : '記録がまだありません';
-  document.getElementById('adFollow').innerHTML = series.length
+  _set('adFollowHint', series.length ? `${series[0].d} 〜 ${series[series.length - 1].d} · 記録 ${series.length}日分` : '記録がまだありません');
+  _set('adFollow', series.length
     ? chartLine(series.slice(-30).map(p => ({ label: dLabel(p.d), value: Number(p.v) || 0 })), { height: 210, aria: 'フォロワー推移' })
-    : emptyBox('「＋ 今日の数値を記録」から毎日のフォロワー数を登録すると、ここに推移が出ます');
+    : emptyBox('「＋ 今日の数値を記録」から毎日のフォロワー数を登録すると、ここに推移が出ます'), 'innerHTML');
 
   const avgOf = k => recent.length ? sum(k) / recent.length : null;
   const avgTxt = (k, f) => avgOf(k) === null ? '—' : f(avgOf(k));
-  document.getElementById('adKpis').innerHTML = [
+  _set('adKpis', [
     ['フォロワー', nf(a.followers), `前日比 ${sign(dl1)} ／ 30日 ${sign(dl30)} ／ 7日 ${sign(dl7)}`],
     ['平均リーチ', avgTxt('reach', v => wan(v)), `直近90日の投稿 ${recent.length}本の平均`],
     ['平均いいね', avgTxt('likes', v => nf(Math.round(v))), `合計 ${nf(sum('likes'))}`],
     ['平均コメント', avgTxt('comments', v => nf(Math.round(v))), `合計 ${nf(sum('comments'))}`],
     ['平均シェア', avgTxt('shares', v => nf(Math.round(v))), `合計 ${nf(sum('shares'))}`],
     ['平均保存', avgTxt('saves', v => nf(Math.round(v))), `合計 ${nf(sum('saves'))}`]
-  ].map(([k, v, d]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join('');
+  ].map(([k, v, d]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join(''), 'innerHTML');
 
   const chron = posts.slice(-16);
-  document.getElementById('adChart').innerHTML = chron.length ? chartBarLine(
+  _set('adChart', chron.length ? chartBarLine(
     chron.map(p => ({ label: dLabel(p.date), bar: p.reach, barText: '', line: metrics(p).er, lineLabel: `${dFull(p.date)} ER ${pct(metrics(p).er)}` })),
     { height: 240, fmtBar: v => wan(v), aria: '投稿ごとのリーチとER' }
-  ) : emptyBox('このアカウントの投稿ログがまだありません');
-  document.getElementById('adFormat').innerHTML = (() => {
-    const g = {};
-    posts.forEach(p => (g[p.format] = g[p.format] || []).push(metrics(p).er));
-    const rows = Object.entries(g).map(([k, v]) => ({
-      label: k, value: v.reduce((x, y) => x + y, 0) / v.length, text: (v.reduce((x, y) => x + y, 0) / v.length).toFixed(2) + '% (' + v.length + '本)'
-    })).sort((x, y) => y.value - x.value);
-    return rows.length ? chartHBars(rows, { aria: '形式別平均ER' }) : emptyBox('データがありません');
-  })();
+  ) : emptyBox('このアカウントの投稿ログがまだありません'), 'innerHTML');
 
-  document.getElementById('adTags').innerHTML = (() => {
-    const g = {};
-    posts.forEach(p => (p.tags || []).forEach(t => (g[t] = g[t] || []).push(Number(p.reach) || 0)));
-    const rows = Object.entries(g).map(([k, v]) => ({
-      label: k, value: v.reduce((x, y) => x + y, 0) / v.length,
-      text: wan(v.reduce((x, y) => x + y, 0) / v.length) + ' (' + v.length + '本)'
-    })).sort((x, y) => y.value - x.value).slice(0, 9);
-    return rows.length ? chartHBars(rows, { aria: 'ハッシュタグ別平均リーチ' }) : emptyBox('ハッシュタグ付きの投稿がまだありません');
-  })();
-
-  document.getElementById('adPostBrief').textContent = posts.length ? `${posts.length}本（新しい順）` : '';
+  _set('adPostBrief', posts.length ? `${posts.length}本（新しい順）` : '');
   const desc = [...posts].reverse().slice(0, 40);
-  document.getElementById('adPosts').innerHTML = desc.length ? `<table>
+  _set('adPosts', desc.length ? `<table>
     <thead><tr><th>日付</th><th>形式</th><th class="num r">リーチ</th><th class="num r">いいね</th><th class="num r">保存</th><th class="num r">シェア</th><th class="num r">ER</th><th>案件</th></tr></thead>
     <tbody>${desc.map(p => { const m = metrics(p); return `
       <tr data-edit-post="${esc(p.id)}" style="cursor:pointer">
@@ -3520,20 +3496,7 @@ function renderAccountDetail() {
         <td class="num r">${nf(p.reach)}</td><td class="num r">${nf(p.likes)}</td><td class="num r">${nf(p.saves)}</td><td class="num r">${nf(p.shares)}</td>
         <td class="num r" style="font-weight:700">${pct(m.er)}</td>
         <td>${p.campaignId ? esc(campById(p.campaignId)?.title || '案件') : '<span style="color:var(--cha)">—</span>'}</td></tr>`; }).join('')}</tbody></table>`
-    : emptyBox('投稿ログを追加すると、この画面に数字が集まります');
-
-  document.getElementById('adInfo').innerHTML = `
-    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
-      <div class="kpi" style="padding-left:0;border-left:0"><div class="k">媒体</div><div class="v" style="font-size:16px;font-family:var(--sans);font-weight:900">${esc(a.platform)}</div></div>
-      <div class="kpi"><div class="k">ハンドル</div><div class="v" style="font-size:16px;font-family:var(--mono)">${esc(a.handle || '—')}</div></div>
-      <div class="kpi" style="grid-column:1/-1"><div class="k">SNSのURL</div><div class="v" style="font-size:12.5px;font-family:var(--mono);word-break:break-all">${(a.url || profileUrl(a)) ? `<a href="${esc(a.url || profileUrl(a))}" target="_blank" rel="noopener" style="color:var(--mori-3);text-decoration:underline">${esc(a.url || profileUrl(a))}</a>` : '—'}</div></div>
-      <div class="kpi"><div class="k">ジャンル</div><div class="v" style="font-size:16px;font-family:var(--sans);font-weight:900">${esc(a.genre || '—')}</div></div>
-      <div class="kpi"><div class="k">フォロワー</div><div class="v" style="font-size:16px">${nf(a.followers)}</div></div>
-    </div>
-    ${a.note ? `<div class="callout" style="margin-top:14px">${esc(a.note)}</div>` : ''}
-    <div class="inline" style="margin-top:16px">
-      <button class="btn" data-edit-acc="${esc(a.id)}">プロフィールを編集</button>
-    </div>`;
+    : emptyBox('投稿ログを追加すると、この画面に数字が集まります'), 'innerHTML');
 }
 
 /* =========================================================================
@@ -4214,7 +4177,7 @@ function packCampCards() {
 function updateChrome() {
   const isAdmin = currentView === 'admin';
   ['railLogout', 'topLogout'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = isAdmin ? '' : 'none'; });
-  const bare = ['campaigns', 'alerts', 'dash', 'accounts', 'trends', 'schedule'].indexOf(currentView) >= 0;
+  const bare = ['campaigns', 'alerts', 'dash', 'accounts', 'trends', 'schedule', 'account'].indexOf(currentView) >= 0;
   const pt = document.getElementById('pageTitle');
   const head = pt ? pt.parentElement : null;
   if (head) head.style.display = bare ? 'none' : '';
@@ -4545,7 +4508,6 @@ if (_logout) _logout.onclick = () => doLogout();
 const _tlogout = document.getElementById('topLogout');
 if (_tlogout) _tlogout.onclick = () => doLogout();
 document.getElementById('adBack').onclick = () => go('accounts');
-document.getElementById('adToInsights').onclick = () => { insFilter.account = currentAccount || ''; go('insights'); };
 document.getElementById('btnBrief2').onclick = openBrief;
 document.getElementById('btnCopyJson').onclick = () => copyText(JSON.stringify(DB), 'JSONをコピーしました');
 document.getElementById('btnAddAccount').onclick = () => openAccount(null);
@@ -5519,6 +5481,18 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .trash-btn:active{transform:translateY(0.5px)}
 .trash-btn:focus-visible{outline:2px solid var(--kohaku);outline-offset:2px}
 .trash-btn svg{display:block}
+/* アカウント管理カード：名前の左に丸アイコン */
+.acc-av{flex:0 0 auto;width:44px;height:44px;border-radius:50%;overflow:hidden;background:#F4E9E4;color:var(--mori);display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:900;font-size:15px;border:1.5px solid var(--line);letter-spacing:0}
+.acc-av img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+/* アカウント詳細：投稿ログ アコーディオン */
+.ad-posts-ac{padding:0}
+.ad-posts-ac>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ad-posts-ac>summary::-webkit-details-marker{display:none}
+.ad-posts-ac>summary::marker{content:''}
+.ad-posts-ac>summary h2{margin:0;font-size:15px}
+.ad-posts-ac .ac-caret{display:inline-block;transition:transform .18s ease;font-size:14px;color:var(--cha)}
+.ad-posts-ac[open]>summary .ac-caret{transform:rotate(180deg)}
+.ad-posts-ac>div{padding:0 16px 16px}
 .per-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 0;border-top:1px dashed var(--line)}
 .per-row:first-child{border-top:0}
 .per-row .an{font-size:11.5px;font-weight:800;flex:1 1 100%}
@@ -5531,7 +5505,7 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .st-chip.on{border-color:var(--mori)}
 /* 追尾型「＋」案件登録 FAB
    規定は非表示。モバイル (<=860px) かつ 案件管理ビュー時のみ表示。 */
-.fab-add{display:none;position:fixed;right:calc(env(safe-area-inset-right, 0px) + 16px);bottom:calc(env(safe-area-inset-bottom, 0px) + 120px);width:56px;height:56px;border-radius:50%;background:var(--mori);color:#fff;border:0;font-size:28px;font-weight:700;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.10);cursor:pointer;z-index:9500;align-items:center;justify-content:center;padding:0;font-family:inherit;transition:transform .15s ease, box-shadow .15s ease}
+.fab-add{display:none;position:fixed;right:calc(env(safe-area-inset-right, 0px) + 16px);bottom:calc(env(safe-area-inset-bottom, 0px) + 148px);width:56px;height:56px;border-radius:50%;background:var(--mori);color:#fff;border:0;font-size:28px;font-weight:700;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.10);cursor:pointer;z-index:9500;align-items:center;justify-content:center;padding:0;font-family:inherit;transition:transform .15s ease, box-shadow .15s ease}
 .fab-add:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.22),0 3px 8px rgba(0,0,0,.12)}
 .fab-add:active{transform:translateY(0);box-shadow:0 3px 10px rgba(0,0,0,.20)}
 .fab-add:focus-visible{outline:3px solid var(--kohaku);outline-offset:3px}
