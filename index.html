@@ -2136,18 +2136,26 @@ function openCamp(id, presetAcc, opts) {
     }
     if (c) {
       Object.assign(c, data);
-      /* recFieldMerge の「新しい方勝ち」で必ず勝てるよう、フィールドタイムスタンプを最新化 */
-      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
+      /* recFieldMerge の「新しい方勝ち」で必ず勝てるよう、フィールドタイムスタンプを最新化。
+         リモートに一時的な時刻ずれや将来スタンプがあっても勝てるよう、少し先の時刻を割り当てる（sbFixTs の上限 sbNow+2000 を超えない範囲で 1500ms 加算） */
+      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
       c._ft = c._ft || {};
-      c._ft.genre = _now;
-      c._ft.priceRange = _now;
-      c._ft.type = _now;
+      /* 全フィールドを一律に最新化して、data の全項目が確実に「勝ち」になるようにする */
+      const _all = ['client', 'accountIds', 'genre', 'priceRange', 'type', 'reward', 'status', 'date', 'visitAt', 'note', 'rewards', 'accDates', 'dropped'];
+      _all.forEach(function (f) { c._ft[f] = _now; });
       c._t = _now;
+      /* localStorage の snap も同期しておく：次回 recStamp 時に「差分なし」と誤判定されないよう、
+         このレコードだけ snap を消して recStamp に「初回扱い」させる */
+      try {
+        var _snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
+        if (_snap && _snap.__v === 3) { delete _snap['camp:' + c.id]; localStorage.setItem('amoti_snap', JSON.stringify(_snap)); }
+      } catch (e) {}
     } else {
       const newC = Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data);
-      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
+      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
       newC._t = _now;
-      newC._ft = { genre: _now, priceRange: _now, type: _now };
+      newC._ft = {};
+      ['client','accountIds','genre','priceRange','type','reward','status','date','visitAt','note','rewards','accDates','dropped'].forEach(function (f) { newC._ft[f] = _now; });
       DB.campaigns.push(newC);
     }
     save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
@@ -5318,6 +5326,13 @@ function recStamp() {
       else if (ft[f] === undefined) { ft[f] = Number(r._t || t); }
     });
     Object.keys(prev).forEach(function (f) { if (!(f in now)) { ft[f] = t; changed = true; } });
+    /* 案件レコード：genre/priceRange のタイムスタンプが _t より古い場合、_t に揃える。
+       過去に同期エンジンで戻された「未設定」上書きの影響でスタンプが古いまま残っている場合の救済 */
+    if (k.indexOf('camp:') === 0 && r._t) {
+      ['genre', 'priceRange', 'type'].forEach(function (f) {
+        if (ft[f] === undefined || Number(ft[f]) < Number(r._t)) ft[f] = Number(r._t);
+      });
+    }
     if (changed) r._t = t;
     snap[k] = now;
   });
@@ -5504,7 +5519,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260921-1128Z';
+const SB_BUILD = '20260921-1140Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
@@ -5721,7 +5736,9 @@ function ensureSharedCard() {
     '<button type="button" class="btn primary" id="shNow">今すぐ同期</button>' +
     '<button type="button" class="btn" id="shPush">この端末の内容をサーバーへ送る</button>' +
     '<button type="button" class="btn ghost" id="shPull">サーバーの内容を取り込む</button>' +
-    '<button type="button" class="btn ghost" id="shUpd">最新版に更新</button></div>' +
+    '<button type="button" class="btn ghost" id="shUpd">最新版に更新</button>' +
+    '<button type="button" class="btn ghost" id="shForceStamp" title="ジャンル・客単価などがサーバー側の古い値に戻される場合の緊急対処">案件のジャンル/客単価をこの端末の値で強制上書き</button>' +
+    '</div>' +
     '<div id="shMsg" style="margin-top:12px;font-size:12px"></div>' +
     '</div>';
   host.parentNode.insertBefore(card, host);
@@ -5729,6 +5746,28 @@ function ensureSharedCard() {
   document.getElementById('shPush').onclick = function () { shPushNow(); };
   document.getElementById('shPull').onclick = function () { shSync(true); };
   document.getElementById('shUpd').onclick = function () { sbForceUpdate(); };
+  const fs = document.getElementById('shForceStamp');
+  if (fs) fs.onclick = function () {
+    if (!confirm('この端末の全案件のジャンル・客単価を「今」の時刻でスタンプし直し、サーバー側の値を強制的に上書きします。よろしいですか？')) return;
+    try {
+      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
+      (DB.campaigns || []).forEach(function (c) {
+        c._ft = c._ft || {};
+        ['genre','priceRange','type','client','date','visitAt','reward','status'].forEach(function (f) { c._ft[f] = _now; });
+        c._t = _now;
+      });
+      try {
+        var _snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
+        if (_snap && _snap.__v === 3) {
+          Object.keys(_snap).forEach(function (k) { if (k.indexOf('camp:') === 0) delete _snap[k]; });
+          localStorage.setItem('amoti_snap', JSON.stringify(_snap));
+        }
+      } catch (e) {}
+      save();
+      _lastPushed = ''; shSync(true);
+      toast('全案件のジャンル・客単価をサーバーへ強制送信しました');
+    } catch (e) { toast('エラー：' + String((e && e.message) || e)); }
+  };
   shInfo();
 }
 function sbInit() {
