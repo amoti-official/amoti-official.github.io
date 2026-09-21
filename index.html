@@ -4586,6 +4586,7 @@ window.addEventListener('focus', () => { try { if (shReady()) shSync(false); } c
 const SB_URL = 'https://nqvgbejvrpwestkdqvav.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xdmdiZWp2cnB3ZXN0a2RxdmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4OTU2MDMsImV4cCI6MjEwNTQ3MTYwM30.2Sx7PjUMQbYtKunGRIjen_KYSNEMEjd-gRWuUXep5b4';
 const SB_ROW = 'team';
+const SB_VER = 'v2';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
@@ -4617,18 +4618,23 @@ function shSay(h) { const el = document.getElementById('shMsg'); if (el) el.inne
 function shInfo() {
   const c = DB.api || {};
   const ts = c.sbAt ? ('最終同期 ' + esc(jDT(c.sbAt))) : 'まだ同期していません';
+  const s = c.sbSrv;
+  const srv = s ? ('アカウント ' + s.a + '件・案件 ' + s.c + '件・投稿 ' + s.p + '件') : 'まだ取得していません';
   const bad = c.sbErr ? ('<div class="callout warn">前回の同期でエラー：' + esc(c.sbErr) + '</div>') : '';
-  shSay('<div class="callout' + (c.sbErr ? ' warn' : '') + '"><b>' + ts + '</b>／サーバー：アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>' + bad);
+  shSay('<div class="callout' + (c.sbErr ? ' warn' : '') + '"><b>' + ts + '</b>（同期エンジン ' + SB_VER + '）' +
+    '<br>この端末：アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '件' +
+    '<br>サーバー：' + srv + '</div>' + bad);
 }
 async function shSync(manual) {
   if (_inSync) return;
   _inSync = true;
   try {
     if (manual) shSay('<div class="callout">同期しています…</div>');
-    let remote = null;
+    let remote = null, srvCount = null;
     try {
       const row = await sbLoadState();
       remote = (row && row.state) ? row.state : null;
+      srvCount = { a: ((remote && remote.accounts) || []).length, c: ((remote && remote.campaigns) || []).length, p: ((remote && remote.posts) || []).length };
     } catch (e) {
       DB.api.sbErr = 'サーバーに接続できません（' + String((e && e.message) || e) + '）';
       shSay('<div class="callout warn">同期できませんでした：' + esc(DB.api.sbErr) + '</div>');
@@ -4655,11 +4661,13 @@ async function shSync(manual) {
     }
     const payload = Object.assign({}, db, { api: {} });
     const body = JSON.stringify(payload);
-    const needPush = body !== _lastPushed;
+    const recCount = ((db.accounts || []).length + (db.campaigns || []).length + (db.posts || []).length);
+    const needPush = (body !== _lastPushed) && (recCount > 0 || !!remote);
     if (needPush) { await sbSaveState(payload); _lastPushed = body; }
     DB.api.sbAt = new Date().toISOString();
     DB.api.sbMs = Date.now();
     DB.api.sbErr = '';
+    if (srvCount) DB.api.sbSrv = srvCount;
     if (got) {
       const keepApi = DB.api;
       db.api = keepApi; db.auth = DB.auth; db.savedAt = DB.savedAt;
@@ -4669,7 +4677,7 @@ async function shSync(manual) {
       toast('他の人の更新を取り込みました');
     } else {
       saveLocal();
-      if (manual) shSay('<div class="callout">' + (needPush ? 'この端末の内容をサーバーへ送信しました。' : '最新の状態です（送信の必要なし）') + '</div>');
+      if (manual) { shSay('<div class="callout">' + (needPush ? 'この端末の内容をサーバーへ送信しました。' : '最新の状態です（送信の必要なし）') + '</div>'); render(); }
     }
     shInfo();
   } catch (e) {
@@ -4685,7 +4693,7 @@ function ensureSharedCard() {
   const host = anchor.closest('.card'); if (!host) return;
   if (document.getElementById('sharedCard')) { shInfo(); return; }
   const card = document.createElement('div'); card.className = 'card'; card.id = 'sharedCard'; card.style.marginTop = '18px';
-  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">設定は不要</span></div>' +
+  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">v2・設定は不要</span></div>' +
     '<div class="card-b">' +
     '<div class="callout"><b>IDもパスワードもワークスペース作成も不要です。</b>このアプリを開いているだけで、編集した内容は自動でサーバーへ保存され、他のPC・スマホと同じデータになります（開いている間は約20秒ごとに取り込み、タブに戻ったときにも同期します）。</div>' +
     '<div class="inline" style="margin-top:12px">' +
@@ -4701,6 +4709,7 @@ function ensureSharedCard() {
   shInfo();
 }
 function sbInit() { setTimeout(function () { try { shSync(false); } catch (e) {} }, 800); }
+window.addEventListener('visibilitychange', function () { if (!document.hidden) { try { shSync(false); } catch (e) {} } });
 sbInit();
 /* === END_AMOTI_SUPABASE === */
 
