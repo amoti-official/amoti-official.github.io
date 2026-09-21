@@ -899,8 +899,7 @@ html{zoom:.7}
       </div></div>
 
       <div class="card" style="margin-top:18px">
-        <div class="card-h"><h2>案件レコード</h2>
-          <span class="hint">行をタップで詳細 ／ ステータスはその場で変更</span></div>
+        <div class="card-h"><h2>案件レコード</h2></div>
         <div class="tw" id="campRecords"></div>
       </div>
     </section>
@@ -1144,6 +1143,8 @@ html{zoom:.7}
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<button type="button" id="fabAddCampaign" class="fab-add" data-hide-in="accounts" aria-label="案件を登録">＋</button>
 
 <script>
 /* =========================================================================
@@ -4513,6 +4514,7 @@ document.getElementById('calGrid').addEventListener('click', e => {
 (() => { const a = document.getElementById('btnAddVisit'); if (a) a.onclick = () => openCamp(null); })();
 
 document.getElementById('btnAddCampaign').onclick = () => openCamp(null);
+(() => { const f = document.getElementById('fabAddCampaign'); if (f) f.onclick = () => openCamp(null); })();
 document.getElementById('btnBrief').onclick = openBrief;
 document.getElementById('railAddAcc').onclick = () => openAccount(null);
 const _logout = document.getElementById('railLogout');
@@ -5498,6 +5500,13 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .st-chips{display:flex;flex-wrap:wrap;gap:6px;padding-top:6px}
 .st-chip{border:1.4px solid var(--line);background:#fff;color:var(--cha);border-radius:999px;padding:6px 13px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;min-height:34px;line-height:1.1}
 .st-chip.on{border-color:var(--mori)}
+/* 追尾型「＋」案件登録 FAB（右下・常時追尾／PWA safe-area対応／モバイル下部ナビ回避） */
+.fab-add{position:fixed;right:calc(env(safe-area-inset-right, 0px) + 20px);bottom:calc(env(safe-area-inset-bottom, 0px) + 22px);width:60px;height:60px;border-radius:50%;background:var(--mori);color:#fff;border:0;font-size:30px;font-weight:700;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.10);cursor:pointer;z-index:9500;display:flex;align-items:center;justify-content:center;padding:0;font-family:inherit;transition:transform .15s ease, box-shadow .15s ease}
+.fab-add:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.22),0 3px 8px rgba(0,0,0,.12)}
+.fab-add:active{transform:translateY(0);box-shadow:0 3px 10px rgba(0,0,0,.20)}
+.fab-add:focus-visible{outline:3px solid var(--kohaku);outline-offset:3px}
+/* タブレット〜スマホ：下部タブバー（rail: 2段構成・実測 ~84px + safe-area）の上に浮かせる */
+@media (max-width:860px){.fab-add{width:56px;height:56px;font-size:28px;right:calc(env(safe-area-inset-right, 0px) + 16px);bottom:calc(env(safe-area-inset-bottom, 0px) + 96px)}}
 </style>
 <div id="devPreview" aria-hidden="true">
   <div class="dev-box">
