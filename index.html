@@ -822,19 +822,6 @@ html{zoom:.7}
 
     <!-- ---------- 02 スケジュール ---------- -->
     <section class="view" id="view-schedule" hidden>
-      <div class="sec-title"><h2>スケジュール</h2>
-        <span class="note" id="schedBrief"></span>
-      </div>
-      <div class="card" style="margin-bottom:16px"><div class="card-b">
-        <div class="inline">
-          <div class="field" style="flex:0 1 150px"><label>種別</label><select id="sKind">
-            <option value="all">訪問＋投稿</option><option value="visit">訪問のみ</option><option value="post">投稿のみ</option>
-          </select></div>
-          <div class="field" style="flex:0 1 180px"><label>アカウント</label><select id="sAccount"></select></div>
-          <div class="field" style="flex:1 1 180px;justify-content:flex-end"><label>&nbsp;</label>
-            <button class="btn primary" id="btnAddVisit">＋ 訪問予定を登録</button></div>
-        </div>
-      </div></div>
 
       <div class="card" style="margin-bottom:18px"><div class="card-b">
         <div class="cal-bar">
@@ -3400,7 +3387,7 @@ function renderSchedule() {
   const mk = y + '-' + String(m + 1).padStart(2, '0');
   const inMonth = ev.filter(e => e.at.slice(0, 7) === mk);
   const mv = inMonth.filter(e => e.kind === 'visit').length;
-  document.getElementById('schedBrief').textContent = `${y}年${m + 1}月 · 訪問 ${mv}件 / 投稿 ${inMonth.length - mv}件`;
+  const _sb = document.getElementById('schedBrief'); if (_sb) _sb.textContent = `${y}年${m + 1}月 · 訪問 ${mv}件 / 投稿 ${inMonth.length - mv}件`;
   document.getElementById('calMonth').textContent = `${y}年 ${m + 1}月`;
 
   const dow = ['日', '月', '火', '水', '木', '金', '土'];
@@ -4205,7 +4192,7 @@ function packCampCards() {
 function updateChrome() {
   const isAdmin = currentView === 'admin';
   ['railLogout', 'topLogout'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = isAdmin ? '' : 'none'; });
-  const bare = ['campaigns', 'alerts', 'dash', 'accounts', 'trends'].indexOf(currentView) >= 0;
+  const bare = ['campaigns', 'alerts', 'dash', 'accounts', 'trends', 'schedule'].indexOf(currentView) >= 0;
   const pt = document.getElementById('pageTitle');
   const head = pt ? pt.parentElement : null;
   if (head) head.style.display = bare ? 'none' : '';
@@ -4373,9 +4360,8 @@ function renderCampStatusBtns() {
 function refreshFilterSelects() {
   renderCampStatusBtns();
   fillSelect(document.getElementById('iAccount'), DB.accounts.map(a => [a.id, a.name]), 'すべてのアカウント');
-  fillSelect(document.getElementById('sAccount'), DB.accounts.map(a => [a.id, a.name]), 'すべてのアカウント');
-  document.getElementById('sAccount').value = schedFilter.account;
-  document.getElementById('sKind').value = schedFilter.kind;
+  const _sAcc = document.getElementById('sAccount'); if (_sAcc) { fillSelect(_sAcc, DB.accounts.map(a => [a.id, a.name]), 'すべてのアカウント'); _sAcc.value = schedFilter.account; }
+  const _sKind = document.getElementById('sKind'); if (_sKind) _sKind.value = schedFilter.kind;
 
   document.getElementById('iAccount').value = insFilter.account;
   document.getElementById('iFormat').value = insFilter.format;
@@ -4473,8 +4459,8 @@ document.getElementById('campRecords').addEventListener('click', e => {
 document.getElementById('iAccount').addEventListener('change', e => { insFilter.account = e.target.value; renderInsights(); });
 document.getElementById('iFormat').addEventListener('change', e => { insFilter.format = e.target.value; renderInsights(); });
 document.getElementById('iPeriod').addEventListener('change', e => { insFilter.period = e.target.value; renderInsights(); });
-document.getElementById('sKind').addEventListener('change', e => { schedFilter.kind = e.target.value; renderSchedule(); });
-document.getElementById('sAccount').addEventListener('change', e => { schedFilter.account = e.target.value; renderSchedule(); });
+(() => { const a = document.getElementById('sKind'); if (a) a.addEventListener('change', e => { schedFilter.kind = e.target.value; renderSchedule(); }); })();
+(() => { const a = document.getElementById('sAccount'); if (a) a.addEventListener('change', e => { schedFilter.account = e.target.value; renderSchedule(); }); })();
 document.getElementById('calPrev').onclick = () => calMove(-1);
 document.getElementById('calNext').onclick = () => calMove(1);
 document.getElementById('calToday').onclick = () => {
@@ -4489,7 +4475,7 @@ document.getElementById('calGrid').addEventListener('click', e => {
   if (d.getMonth() !== calCursor.getMonth()) calCursor = new Date(d.getFullYear(), d.getMonth(), 1);
   renderSchedule();
 });
-document.getElementById('btnAddVisit').onclick = () => openCamp(null);
+(() => { const a = document.getElementById('btnAddVisit'); if (a) a.onclick = () => openCamp(null); })();
 
 document.getElementById('btnAddCampaign').onclick = () => openCamp(null);
 document.getElementById('btnBrief').onclick = openBrief;
