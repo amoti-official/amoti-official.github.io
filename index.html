@@ -1541,7 +1541,18 @@ const VIEW_TITLES = {
 function go(view) {
   currentView = view;
   document.body.dataset.view = view;
-  if (view === 'trends') { try { markTrendsSeen(); } catch (e) {} }
+  if (view === 'trends') {
+    /* トレンドを開く直前、未読のあるSNSを優先的に選択する */
+    try {
+      const cur = trendPlatform;
+      const curUnseen = (cur && cur !== 'すべて') ? unseenByPlatform(cur) : 0;
+      if (!curUnseen) {
+        const firstWithUnseen = PLATFORMS.find(p => unseenByPlatform(p) > 0);
+        if (firstWithUnseen) trendPlatform = firstWithUnseen;
+      }
+      markTrendsSeen();
+    } catch (e) {}
+  }
   document.querySelectorAll('.view').forEach(v => v.hidden = true);
   document.getElementById('view-' + view).hidden = false;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.view === view));
@@ -3778,9 +3789,21 @@ function renderTrends() {
   const sel = trendPlatform;
   const tabEl = document.getElementById('trendTabs');
   if (tabEl) {
-    tabEl.innerHTML = PLATFORMS.map(x => `<button type="button" class="trend-tab${x === sel ? ' on' : ''}" data-tp="${esc(x)}">${esc(x)}</button>`).join('')
-      + `<button type="button" class="trend-tab${sel === 'すべて' ? ' on' : ''}" data-tp="すべて">すべて</button>`;
-    tabEl.onclick = e => { const b = e.target.closest('[data-tp]'); if (!b) return; trendPlatform = b.dataset.tp; renderTrends(); };
+    const bell = n => n > 0 ? `<span class="tt-bell" aria-label="未読 ${n}件">🔔${n}</span>` : '';
+    const totalUnseen = newsUnseenCount();
+    tabEl.innerHTML = PLATFORMS.map(x => {
+      const u = unseenByPlatform(x);
+      return `<button type="button" class="trend-tab${x === sel ? ' on' : ''}" data-tp="${esc(x)}">${esc(x)}${bell(u)}</button>`;
+    }).join('')
+      + `<button type="button" class="trend-tab${sel === 'すべて' ? ' on' : ''}" data-tp="すべて">すべて${bell(totalUnseen)}</button>`;
+    tabEl.onclick = e => {
+      const b = e.target.closest('[data-tp]'); if (!b) return;
+      trendPlatform = b.dataset.tp;
+      /* タブ押下でそのSNSを既読に（railベル更新も） */
+      try { if (trendPlatform === 'すべて') PLATFORMS.forEach(markPlatformSeen); else markPlatformSeen(trendPlatform); } catch (err) {}
+      renderTrends();
+      try { updateTrendsNav(); } catch (err) {}
+    };
   }
   const hit = n => sel === 'すべて' || trendPlat(n) === sel
     || (!trendPlat(n) && (((n.t || '') + ' ' + (n.b || '') + ' ' + (n.m || '')).toLowerCase().indexOf(sel.toLowerCase()) >= 0));
@@ -4239,10 +4262,32 @@ function newsLatestDate() {
     return best;
   } catch (e) { return ''; }
 }
-function newsUnseenCount() {
+/* プラットフォーム別の見た印。SNSタブを開くごとに、その媒体の最新日付を記録する */
+function trendsSeenBy() {
+  try { DB.trends = DB.trends || {}; DB.trends.seenBy = DB.trends.seenBy || {}; return DB.trends.seenBy; }
+  catch (e) { return {}; }
+}
+function newsLatestByPlatform(p) {
   try {
-    const seen = (DB.trends && DB.trends.seenKey) || '';
-    return (NEWS || []).filter(n => newsSortKey(n.d) > seen).length;
+    let best = '';
+    (NEWS || []).forEach(n => {
+      if (trendPlat(n) !== p) return;
+      const k = newsSortKey(n.d); if (k > best) best = k;
+    });
+    return best;
+  } catch (e) { return ''; }
+}
+function unseenByPlatform(p) {
+  try {
+    const seen = trendsSeenBy()[p] || '';
+    return (NEWS || []).filter(n => trendPlat(n) === p && newsSortKey(n.d) > seen).length;
+  } catch (e) { return 0; }
+}
+function newsUnseenCount() {
+  /* 各SNSの未読件数の合計。プラットフォーム未特定の記事はどのSNSにも属さないため除外（それでも
+     railベルは1件でも未読があれば付く仕様） */
+  try {
+    return PLATFORMS.reduce((s, p) => s + unseenByPlatform(p), 0);
   } catch (e) { return 0; }
 }
 /* トレンドに新しい情報があるとrailボタンにベルを表示 */
@@ -4263,16 +4308,28 @@ function updateTrendsNav() {
     }
   });
 }
-/* トレンド画面を開いた瞬間に「見た」印を付ける（ベル消灯） */
+/* 指定 SNS を「見た」印にする（そのSNSのベル消灯） */
+function markPlatformSeen(p) {
+  try {
+    if (!p || p === 'すべて') return;
+    const latest = newsLatestByPlatform(p);
+    if (!latest) return;
+    const sb = trendsSeenBy();
+    if (sb[p] !== latest) {
+      sb[p] = latest;
+      DB.trends.seenAt = new Date().toISOString();
+      DB.trends.seenKey = newsLatestDate(); /* 後方互換 */
+      save();
+    }
+  } catch (e) {}
+}
+/* トレンド画面を開いた瞬間、現在アクティブなSNSタブだけ既読にする（他SNSのベルは残る） */
 function markTrendsSeen() {
   try {
     DB.trends = DB.trends || {};
-    const latest = newsLatestDate();
-    if (latest && DB.trends.seenKey !== latest) {
-      DB.trends.seenKey = latest;
-      DB.trends.seenAt = new Date().toISOString();
-      save();
-    }
+    if (trendPlatform && trendPlatform !== 'すべて') markPlatformSeen(trendPlatform);
+    /* 「すべて」タブ表示中は全SNSを既読扱い */
+    if (trendPlatform === 'すべて') PLATFORMS.forEach(markPlatformSeen);
   } catch (e) {}
 }
 /* ログイン直後にトレンド差分をチェックして通知（AI分析トリガーの位置） */
@@ -5576,6 +5633,9 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .trend-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .trend-tab{border:1.4px solid var(--line);background:#fff;color:var(--cha);border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;min-height:36px;line-height:1.1}
 .trend-tab.on{background:var(--mori);border-color:var(--mori);color:#fff}
+.trend-tab{position:relative;display:inline-flex;align-items:center;gap:6px}
+.trend-tab .tt-bell{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:10.5px;font-weight:900;font-family:var(--mono);border-radius:999px;background:var(--shu);color:#fff;line-height:1}
+.trend-tab.on .tt-bell{background:#fff;color:var(--shu)}
 .inv-mini{padding:5px 10px!important;font-size:11px!important;min-height:30px;flex:0 0 auto;white-space:nowrap}
 .inv-mini.on{background:var(--mori)!important;border-color:var(--mori)!important;color:#fff!important}
 /* 案件レコード：ゴミ箱アイコンボタン（案件管理スマホカードの st-seg 直後に配置） */
