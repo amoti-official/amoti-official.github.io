@@ -4438,7 +4438,7 @@ function recMerge(a, b) {
 function recStamp() {
   const snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
   const cur = recSplit(DB);
-  const t = Date.now();
+  const t = (typeof sbNow === 'function') ? sbNow() : Date.now();
   Object.keys(cur).forEach(k => {
     const now = JSON.stringify(cur[k]);
     if (snap[k] !== now) { cur[k]._t = t; snap[k] = JSON.stringify(cur[k]); }
@@ -4587,6 +4587,31 @@ window.addEventListener('focus', () => { try { if (shReady()) shSync(false); } c
 const SB_URL = 'https://nqvgbejvrpwestkdqvav.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xdmdiZWp2cnB3ZXN0a2RxdmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4OTU2MDMsImV4cCI6MjEwNTQ3MTYwM30.2Sx7PjUMQbYtKunGRIjen_KYSNEMEjd-gRWuUXep5b4';
 const SB_ROW = 'team';
+let _skew = 0;
+let _snap2 = null;
+function sbNow() { return Date.now() + _skew; }
+function sbDigest(r) { const o = Object.assign({}, r); delete o._t; return JSON.stringify(o); }
+function sbFixTs(o) {
+  const cap = sbNow() + 600000;
+  const fix = function (v) { const n = Number(v) || 0; return n > cap ? cap : n; };
+  try {
+    if (o.tombs) Object.keys(o.tombs).forEach(function (k) { o.tombs[k] = fix(o.tombs[k]); });
+    const recs = recSplit(o);
+    Object.keys(recs).forEach(function (k) { if (recs[k] && recs[k]._t) recs[k]._t = fix(recs[k]._t); });
+  } catch (e) {}
+}
+function sbSnapReset() { const cur = recSplit(DB); _snap2 = {}; Object.keys(cur).forEach(function (k) { _snap2[k] = sbDigest(cur[k]); }); }
+function sbStampLocal() {
+  const cur = recSplit(DB);
+  if (_snap2 === null) { sbSnapReset(); return; }
+  const t = sbNow();
+  Object.keys(cur).forEach(function (k) {
+    const d = sbDigest(cur[k]);
+    if (_snap2[k] !== d) { cur[k]._t = t; _snap2[k] = d; }
+  });
+  DB.tombs = DB.tombs || {};
+  Object.keys(_snap2).forEach(function (k) { if (!(k in cur)) { DB.tombs[k] = t; delete _snap2[k]; } });
+}
 const SB_VER = 'v3';
 const SB_BUILD = '20260921-0148Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
@@ -4595,6 +4620,7 @@ async function sbFetch(path, opts) {
   const o = Object.assign({}, opts || {});
   o.headers = sbH(o.headers || {});
   const r = await fetch(SB_URL + path, o);
+  try { const _d = r.headers.get('date'); if (_d) { const _t2 = Date.parse(_d); if (_t2) _skew = _t2 - Date.now(); } } catch (e) {}
   const txt = await r.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = txt; }
@@ -4642,15 +4668,6 @@ async function sbCheckUpdate() {
     location.reload();
   } catch (e) {}
 }
-function sbCap(o, anchor) {
-  const cap = anchor + 600000;
-  const fix = function (v) { const n = Number(v) || 0; return n > cap ? cap : n; };
-  try {
-    if (o.tombs) Object.keys(o.tombs).forEach(function (k) { o.tombs[k] = fix(o.tombs[k]); });
-    const recs = recSplit(o);
-    Object.keys(recs).forEach(function (k) { if (recs[k] && recs[k]._t) recs[k]._t = fix(recs[k]._t); });
-  } catch (e) {}
-}
 function sbBusy() {
   try {
     const a = document.activeElement;
@@ -4684,12 +4701,13 @@ async function shSync(manual) {
   if (_inSync) return;
   _inSync = true;
   try {
+    try { sbFixTs(DB); sbStampLocal(); } catch (e) {}
     if (manual) shSay('<div class="callout">同期しています…</div>');
     let remote = null, srvCount = null;
     try {
       const row = await sbLoadState();
       remote = (row && row.state) ? row.state : null;
-      if (remote) { const _at = Number(Date.parse((row && row.updated_at) || '')) || Date.now(); sbCap(remote, _at); }
+      if (remote) sbFixTs(remote);
       srvCount = { a: ((remote && remote.accounts) || []).length, c: ((remote && remote.campaigns) || []).length, p: ((remote && remote.posts) || []).length };
     } catch (e) {
       DB.api.sbErr = 'サーバーに接続できません（' + String((e && e.message) || e) + '）';
@@ -4707,8 +4725,9 @@ async function shSync(manual) {
     const recCount = ((db.accounts || []).length + (db.campaigns || []).length + (db.posts || []).length);
     const needPush = (body !== _lastPushed) && (recCount > 0 || !!remote);
     if (needPush) { await sbSaveState(payload); _lastPushed = body; }
-    DB.api.sbAt = new Date().toISOString();
-    DB.api.sbMs = Date.now();
+    try { sbSnapReset(); } catch (e) {}
+    DB.api.sbAt = new Date(sbNow()).toISOString();
+    DB.api.sbMs = sbNow();
     DB.api.sbErr = '';
     if (srvCount) DB.api.sbSrv = srvCount;
     if (got) {
