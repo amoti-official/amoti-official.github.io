@@ -3899,9 +3899,13 @@ function packCampCards() {
     }
     if (rIns) {
       const v = rIns.querySelector('.v');
-      if (v && v.children.length > 1) {
-        const parts = [...v.children].map(c => (c.textContent || '').trim()).filter(Boolean);
-        if (parts.length > 1) v.textContent = parts.join(' / ');
+      if (v) {
+        let host = v, guard = 0;
+        while (host.children.length === 1 && host.children[0].children.length && guard++ < 4) host = host.children[0];
+        if (host.children.length > 1) {
+          const parts = [...host.children].map(c => (c.textContent || '').trim()).filter(Boolean);
+          if (parts.length > 1) v.textContent = parts.join(' / ');
+        }
       }
       if (v) v.classList.add('one');
     }
