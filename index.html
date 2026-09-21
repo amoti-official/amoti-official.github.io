@@ -1873,7 +1873,7 @@ function renderCampaigns() {
   if (!list.length) {
     box.innerHTML = emptyBox(DB.campaigns.length
       ? '条件に合う案件がありません。絞り込みを解除するか、右上の「＋ 案件を登録」から追加できます。'
-      : 'この端末には案件データがありません。管理情報の「共有モード」でメールアドレスとパスワードを入力してログインすると、他の端末と同じデータが自動で表示されます。右上の「＋ 案件を登録」で追加するか、管理情報の「JSONを読み込む」でPCのバックアップを復元できます。');
+      : 'この端末には案件データがありません。他のPC・スマホと同じデータを自動で共有しています（設定は不要）。右上の「＋ 案件を登録」で追加するか、管理情報の「JSONを読み込む」でPCのバックアップを復元できます。');
     return;
   }
   box.innerHTML = `<table class="rec-table">
@@ -4484,6 +4484,7 @@ async function shSync(manual) {
       db.auth = DB.auth;
       db.savedAt = DB.savedAt;
       DB = normalize(db);
+      recStamp();
       saveLocal(); refreshFilterSelects(); render();
       toast('他の端末の更新を取り込みました');
       shSay('<div class="callout"><b>取り込みました。</b>アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>');
@@ -4584,11 +4585,9 @@ window.addEventListener('focus', () => { try { if (shReady()) shSync(false); } c
 /* === AMOTI_SUPABASE === */
 const SB_URL = 'https://nqvgebjvrpwestkdqvav.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xdmdiZWp2cnB3ZXN0a2RxdmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4OTU2MDMsImV4cCI6MjEwNTQ3MTYwM30.2Sx7PjUMQbYtKunGRIjen_KYSNEMEjd-gRWuUXep5b4';
+const SB_ROW = 'team';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
-function sbTok() { return String(sbC().sbToken || ''); }
-function sbLogged() { return !!(sbTok() && sbC().sbUserId); }
-function sbWsId() { return String(sbC().sbWsId || ''); }
-function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + (sbTok() || SB_KEY), 'Content-Type': 'application/json' }, extra || {}); }
+function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
   const o = Object.assign({}, opts || {});
   o.headers = sbH(o.headers || {});
@@ -4597,212 +4596,112 @@ async function sbFetch(path, opts) {
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = txt; }
   if (!r.ok) {
-    const msg = (data && (data.message || data.msg || data.error_description || data.error || data.hint)) || ('HTTP ' + r.status);
+    const msg = (data && (data.message || data.msg || data.error || data.hint)) || ('HTTP ' + r.status);
     const err = new Error(String(msg)); err.status = r.status; throw err;
   }
   return data;
 }
-function sbSetSession(d, email) {
-  const c = sbC();
-  c.sbToken = d.access_token || '';
-  c.sbRefresh = d.refresh_token || '';
-  c.sbUserId = (d.user && d.user.id) || c.sbUserId || '';
-  c.sbEmail = email || (d.user && d.user.email) || c.sbEmail || '';
+async function sbLoadState() {
+  const rows = await sbFetch('/rest/v1/amoti_share?id=eq.' + SB_ROW + '&select=state,updated_at', { method: 'GET' });
+  return (rows && rows[0]) || null;
 }
-async function sbSignIn(email, pw) { const d = await sbFetch('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: email, password: pw }) }); sbSetSession(d, email); return d; }
-async function sbSignUp(email, pw) { const d = await sbFetch('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email: email, password: pw }) }); if (d && d.access_token) sbSetSession(d, email); else if (d && d.user) sbC().sbUserId = d.user.id; return d; }
-async function sbRefreshSession() {
-  const c = sbC();
-  if (!c.sbRefresh) return false;
-  try { const d = await sbFetch('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: c.sbRefresh }) }); sbSetSession(d, c.sbEmail); return true; }
-  catch (e) { c.sbToken = ''; c.sbRefresh = ''; c.sbUserId = ''; return false; }
+async function sbSaveState(state) {
+  await sbFetch('/rest/v1/amoti_share', {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify([{ id: SB_ROW, state: state, updated_at: new Date().toISOString() }])
+  });
 }
-async function sbLoadState(ws) {
-  const c = sbC(), q = encodeURIComponent(ws);
-  if (c.sbMode !== 'settings') {
-    try {
-      const rows = await sbFetch('/rest/v1/amoti_state?workspace_id=eq.' + q + '&select=state,updated_at', { method: 'GET' });
-      c.sbMode = 'table';
-      return (rows && rows[0]) || null;
-    } catch (e) { c.sbMode = 'settings'; }
-  }
-  const rows2 = await sbFetch('/rest/v1/workspace_settings?workspace_id=eq.' + q + '&select=profile', { method: 'GET' });
-  const pf = rows2 && rows2[0] && rows2[0].profile;
-  return (pf && pf.__amoti) ? { state: pf.__amoti, updated_at: null } : null;
-}
-async function sbSaveState(ws, state) {
-  const c = sbC();
-  if (c.sbMode !== 'settings') {
-    try {
-      await sbFetch('/rest/v1/amoti_state', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ workspace_id: ws, state: state, updated_at: new Date().toISOString() }]) });
-      c.sbMode = 'table';
-      return;
-    } catch (e) { c.sbMode = 'settings'; }
-  }
-  await sbFetch('/rest/v1/workspace_settings', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ workspace_id: ws, profile: { __amoti: state } }]) });
-}
-async function sbWsList() {
-  const rows = await sbFetch('/rest/v1/workspace_members?select=workspace_id,role,workspaces(id,name)', { method: 'GET' });
-  return (rows || []).map(function (r) { return { id: r.workspace_id, role: r.role, name: (r.workspaces && r.workspaces.name) || '(無名)' }; });
-}
-async function sbCreateWs(name) { return await sbFetch('/rest/v1/rpc/create_workspace', { method: 'POST', body: JSON.stringify({ p_name: name }) }); }
-var sbWsCache = [];
-function shReady() { return sbLogged() && !!sbWsId(); }
+function shReady() { return true; }
 function shSay(h) { const el = document.getElementById('shMsg'); if (el) el.innerHTML = h; }
 function shInfo() {
   const c = DB.api || {};
-  if (!sbLogged()) { shSay('<div class="callout warn"><b>状態：</b>未ログイン。上のメールアドレスとパスワードでログイン（初回は「アカウントを作成」）してください。</div>'); return; }
   const ts = c.sbAt ? ('最終同期 ' + esc(jDT(c.sbAt))) : 'まだ同期していません';
-  const wn = c.sbWsName || (sbWsCache.filter(function (w) { return w.id === c.sbWsId; })[0] || {}).name || '';
-  shSay('<div class="callout' + (shReady() ? '' : ' warn') + '"><b>状態：</b>' + (shReady() ? ('Supabaseに接続中（' + esc(wn) + ' ／ ' + esc(c.sbEmail || '') + '）／' + ts) : 'ログイン済みですがワークスペースが未選択です。「ワークスペースを作成」か一覧から選択してください') + '</div>');
+  const bad = c.sbErr ? ('<div class="callout warn">前回の同期でエラー：' + esc(c.sbErr) + '</div>') : '';
+  shSay('<div class="callout' + (c.sbErr ? ' warn' : '') + '"><b>' + ts + '</b>／サーバー：アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>' + bad);
 }
 async function shSync(manual) {
-  if (!shReady()) { if (manual) toast('先にSupabaseへログインしてください'); return; }
   if (_inSync) return;
   _inSync = true;
-  const ws = sbWsId();
   try {
     if (manual) shSay('<div class="callout">同期しています…</div>');
     let remote = null;
     try {
-      const row = await sbLoadState(ws);
+      const row = await sbLoadState();
       remote = (row && row.state) ? row.state : null;
     } catch (e) {
-      if (Number(e && e.status) === 401) {
-        const okr = await sbRefreshSession();
-        if (!okr) { shSay('<div class="callout warn">ログインの有効期限が切れました。もう一度ログインしてください。</div>'); _inSync = false; return; }
-        const row2 = await sbLoadState(ws);
-        remote = (row2 && row2.state) ? row2.state : null;
-      } else { throw e; }
+      DB.api.sbErr = 'サーバーに接続できません（' + String((e && e.message) || e) + '）';
+      shSay('<div class="callout warn">同期できませんでした：' + esc(DB.api.sbErr) + '</div>');
+      _inSync = false; return;
     }
     let db = DB, got = 0;
     if (remote) {
-      const before = JSON.stringify(recSplit(DB));
-      db = recMerge(DB, remote);
+      const rset = recSplit(remote);
+      const lastMs = Number((DB.api || {}).sbMs || 0);
+      const recs = recSplit(DB);
+      let removed = 0;
+      Object.keys(recs).forEach(k => {
+        if (rset[k] === undefined && Number((recs[k] && recs[k]._t) || 0) < lastMs) {
+          delete recs[k];
+          DB.tombs = DB.tombs || {};
+          DB.tombs[k] = Date.now();
+          removed++;
+        }
+      });
+      if (removed) db = recJoin(recs, DB);
+      const before = JSON.stringify(recSplit(db));
+      db = recMerge(db, remote);
       if (JSON.stringify(recSplit(db)) !== before) got = 1;
     }
     const payload = Object.assign({}, db, { api: {} });
     const body = JSON.stringify(payload);
     const needPush = body !== _lastPushed;
-    if (needPush) { await sbSaveState(ws, payload); _lastPushed = body; }
+    if (needPush) { await sbSaveState(payload); _lastPushed = body; }
     DB.api.sbAt = new Date().toISOString();
+    DB.api.sbMs = Date.now();
+    DB.api.sbErr = '';
     if (got) {
       const keepApi = DB.api;
       db.api = keepApi; db.auth = DB.auth; db.savedAt = DB.savedAt;
       DB = normalize(db);
+      recStamp();
       saveLocal(); refreshFilterSelects(); render();
-      toast('他の端末の更新を取り込みました');
-      shSay('<div class="callout"><b>取り込みました。</b>アカウント ' + (DB.accounts || []).length + '件・案件 ' + (DB.campaigns || []).length + '件・投稿 ' + (DB.posts || []).length + '本</div>');
+      toast('他の人の更新を取り込みました');
     } else {
       saveLocal();
       if (manual) shSay('<div class="callout">' + (needPush ? 'この端末の内容をサーバーへ送信しました。' : '最新の状態です（送信の必要なし）') + '</div>');
     }
-    shDrawWs();
     shInfo();
   } catch (e) {
-    shSay('<div class="callout warn">同期できませんでした：' + esc(String((e && e.message) || e)) + '</div>');
+    DB.api.sbErr = String((e && e.message) || e);
+    shSay('<div class="callout warn">同期できませんでした：' + esc(DB.api.sbErr) + '</div>');
   }
   _inSync = false;
 }
-function shDrawWs() {
-  const sel = document.getElementById('sbWsSel');
-  if (!sel) return;
-  const cur = sbWsId();
-  sel.innerHTML = '<option value="">（ワークスペースを選択）</option>' + sbWsCache.map(function (w) {
-    return '<option value="' + esc(w.id) + '"' + (w.id === cur ? ' selected' : '') + '>' + esc(w.name) + '（' + esc(w.role) + '）</option>';
-  }).join('');
-}
-async function sbLoadWorkspaces() {
-  if (!sbLogged()) return;
-  try { sbWsCache = await sbWsList(); } catch (e) { sbWsCache = []; }
-  shDrawWs();
-}
-function sbEmail(v) { const t = String(v || '').trim(); if (!t) return ''; return t.indexOf('@') >= 0 ? t : t + '@amoti.local'; }
-async function sbLogin(create) {
-  const rawId = (document.getElementById('sbEmail').value || '').trim();
-  const email = sbEmail(rawId);
-  const pw = document.getElementById('sbPw').value || '';
-  if (!email || !pw) { shSay('<div class="callout warn">メールアドレスとパスワードを入力してください</div>'); return; }
-  try {
-    shSay('<div class="callout">' + (create ? 'アカウントを作成しています…' : 'ログインしています…') + '</div>');
-    const d = create ? await sbSignUp(email, pw) : await sbSignIn(email, pw);
-    if (!d || !d.access_token) { shSay('<div class="callout warn">メール確認が必要な設定です。Supabase → Authentication → Providers → Email で「Confirm email」をオフにするか、確認メールのリンクを開いてからログインしてください。</div>'); return; }
-    saveLocal();
-    await sbLoadWorkspaces();
-    if (sbWsCache.length) { sbC().sbWsId = sbWsCache[0].id; sbC().sbWsName = sbWsCache[0].name; await sbEnter(); }
-    else { shInfo(); shSay('<div class="callout"><b>ログインしました。</b>次に「ワークスペースを作成」を押してください（チームのデータ置き場ができます）。</div>'); }
-  } catch (e) {
-    shSay('<div class="callout warn">' + esc(String((e && e.message) || e)) + '（初めての方は「アカウントを作成」を押してください）</div>');
-  }
-}
-async function sbCreateWsUI() {
-  if (!sbLogged()) { shSay('<div class="callout warn">先にログインしてください</div>'); return; }
-  const name = (document.getElementById('sbWsName').value || '').trim() || 'AMOTI チーム';
-  try {
-    const id = await sbCreateWs(name);
-    await sbLoadWorkspaces();
-    if (id) { sbC().sbWsId = String(id); sbC().sbWsName = name; }
-    await sbEnter();
-    shSay('<div class="callout"><b>ワークスペース「' + esc(name) + '」を作成しました。</b>他のPC・スマホでは同じメールアドレスでログインしてください（同じデータが表示されます）。別の人を招く場合は、その人を Supabase の Authentication → Users で作成し、SQL Editor で workspace_members に追加します。</div>');
-  } catch (e) { shSay('<div class="callout warn">作成できませんでした：' + esc(String((e && e.message) || e)) + '</div>'); }
-}
-async function sbEnter() {
-  const sel = document.getElementById('sbWsSel');
-  if (sel && sel.value) { sbC().sbWsId = sel.value; const w = sbWsCache.filter(function (x) { return x.id === sel.value; })[0]; if (w) sbC().sbWsName = w.name; }
-  if (!sbWsId()) { shInfo(); return; }
-  _lastPushed = '';
-  saveLocal();
-  await shSync(true);
-}
-function sbSignOut() {
-  const c = sbC();
-  c.sbToken = ''; c.sbRefresh = ''; c.sbUserId = ''; c.sbEmail = ''; c.sbWsId = ''; c.sbWsName = ''; c.sbAt = '';
-  _lastPushed = ''; sbWsCache = [];
-  saveLocal(); shDrawWs(); shInfo();
-  toast('ログアウトしました');
-}
+function shPushNow() { _lastPushed = ''; shSync(true); }
 function ensureSharedCard() {
   const anchor = document.getElementById('btnWipe');
   if (!anchor) return;
   const host = anchor.closest('.card'); if (!host) return;
   if (document.getElementById('sharedCard')) { shInfo(); return; }
-  const c = DB.api || {};
   const card = document.createElement('div'); card.className = 'card'; card.id = 'sharedCard'; card.style.marginTop = '18px';
-  card.innerHTML = '<div class="card-h"><h2>共有モード（複数人・複数端末で同じデータ）</h2><span class="hint">Supabase（サーバー保存）</span></div>' +
+  card.innerHTML = '<div class="card-h"><h2>全員で同じデータ（自動同期）</h2><span class="hint">設定は不要</span></div>' +
     '<div class="card-b">' +
-    '<div class="callout"><b>チームで1つのデータを共有します。</b><b>全員が同じID・パスワードを共有</b>してログインすると、データはサーバー（Supabase）に保存され、<b>どのPC・スマホからログインしても同じ内容</b>が表示されます。編集は自動送信され、開いている間は約20秒ごとに他の端末の更新を取り込みます。</div>' +
-    '<div class="field" style="margin-top:12px"><label>ID（メールアドレス、または好きなID）</label><input id="sbEmail" type="text" autocomplete="username" placeholder="例：amoti でも you@example.com でもOK" value="' + esc(c.sbEmail || '') + '"></div>' +
-    '<div class="field" style="margin-top:10px"><label>パスワード（8文字以上）</label><input id="sbPw" type="password" autocomplete="current-password" placeholder="パスワード"></div>' +
+    '<div class="callout"><b>IDもパスワードもワークスペース作成も不要です。</b>このアプリを開いているだけで、編集した内容は自動でサーバーへ保存され、他のPC・スマホと同じデータになります（開いている間は約20秒ごとに取り込み、タブに戻ったときにも同期します）。</div>' +
     '<div class="inline" style="margin-top:12px">' +
-    '<button type="button" class="btn primary" id="sbLoginBtn">ログイン</button>' +
-    '<button type="button" class="btn" id="sbSignupBtn">アカウントを作成</button>' +
-    '<button type="button" class="btn ghost" id="sbOutBtn">ログアウト</button></div>' +
-    '<div class="field" style="margin-top:14px"><label>ワークスペース（チームのデータ置き場）</label><select id="sbWsSel"></select></div>' +
-    '<div class="inline" style="margin-top:10px">' +
-    '<button type="button" class="btn" id="sbEnterBtn">このワークスペースに入る／今すぐ同期</button>' +
-    '<input id="sbWsName" placeholder="新しいワークスペース名（例：AMOTI チーム）" style="flex:1 1 200px">' +
-    '<button type="button" class="btn" id="sbCreateBtn">ワークスペースを作成</button></div>' +
+    '<button type="button" class="btn primary" id="shNow">今すぐ同期</button>' +
+    '<button type="button" class="btn" id="shPush">この端末の内容をサーバーへ送る</button>' +
+    '<button type="button" class="btn ghost" id="shPull">サーバーの内容を取り込む</button></div>' +
     '<div id="shMsg" style="margin-top:12px;font-size:12px"></div>' +
-    '<div class="callout warn" style="margin-top:12px">データはご自身のSupabase（サーバー）にのみ保存され、アクセスは「同じワークスペースのメンバーだけ」にDB側で制限されています（RLS）。同じレコードを2台で同時に編集した場合は、後から保存した方の内容が優先されます。</div>' +
     '</div>';
   host.parentNode.insertBefore(card, host);
-  document.getElementById('sbLoginBtn').onclick = function () { sbLogin(false); };
-  document.getElementById('sbSignupBtn').onclick = function () { sbLogin(true); };
-  document.getElementById('sbOutBtn').onclick = function () { sbSignOut(); };
-  document.getElementById('sbEnterBtn').onclick = function () { sbEnter(); };
-  document.getElementById('sbCreateBtn').onclick = function () { sbCreateWsUI(); };
-  shDrawWs(); shInfo();
-}
-async function sbInit() {
-  if (!sbTok()) { return; }
-  const ok = await sbRefreshSession();
-  if (!ok) { shInfo(); return; }
-  await sbLoadWorkspaces();
-  if (!sbWsId() && sbWsCache.length) sbC().sbWsId = sbWsCache[0].id;
-  if (sbWsId()) shSync(false);
+  document.getElementById('shNow').onclick = function () { shSync(true); };
+  document.getElementById('shPush').onclick = function () { shPushNow(); };
+  document.getElementById('shPull').onclick = function () { shSync(true); };
   shInfo();
 }
-setTimeout(function () { try { sbInit(); } catch (e) {} }, 1500);
+function sbInit() { setTimeout(function () { try { shSync(false); } catch (e) {} }, 800); }
+sbInit();
 /* === END_AMOTI_SUPABASE === */
 
 go(VIEW_TITLES[h] ? h : 'dash');
