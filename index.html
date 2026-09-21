@@ -4128,17 +4128,14 @@ function packCampCards() {
       rCli.remove();
     }
     head.appendChild(hd);
-    if (rSt || rInv) {
+    if (rSt) {
       const acts = document.createElement('span'); acts.className = 'acts';
-      [rSt, rInv].forEach(r => {
-        if (!r) return;
-        const v = r.querySelector('.v');
-        if (v) { while (v.firstChild) acts.appendChild(v.firstChild); }
-        r.remove();
-      });
-      acts.querySelectorAll('button[data-inv]').forEach(b => { if (b.textContent.trim() === '発行') b.textContent = '請求書発行'; });
+      const _v = rSt.querySelector('.v');
+      if (_v) { while (_v.firstChild) acts.appendChild(_v.firstChild); }
+      rSt.remove();
       if (acts.childNodes.length) head.appendChild(acts);
     }
+    if (rInv) rInv.remove();
     const _camp = card.dataset.rec ? campById(card.dataset.rec) : null;
     const _accs = _camp ? campAccs(_camp) : [];
     if (_camp && _accs.length > 1) {
@@ -4339,9 +4336,10 @@ function render() {
   const _fs = document.getElementById('footStamp');
   if (_fs) _fs.textContent =
     '最終更新 ' + TODAY.getFullYear() + '.' + String(TODAY.getMonth()+1).padStart(2,'0') + '.' + String(TODAY.getDate()).padStart(2,'0');
-  applyMobileTables(); attachAccInvBtns();
+  applyMobileTables();
   packCampCards();
   packAlertCards();
+  attachAccInvBtns();
   updateAlertNav();
   updateChrome();
 }
