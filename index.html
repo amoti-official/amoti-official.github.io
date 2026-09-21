@@ -3888,11 +3888,16 @@ function packCampCards() {
       acts.querySelectorAll('button[data-inv]').forEach(b => { if (b.textContent.trim() === '発行') b.textContent = '請求書発行'; });
       if (acts.childNodes.length) head.appendChild(acts);
     }
-    if (rAcc) rAcc.classList.add('stk');
     if (rRew && rPost) {
       const two = document.createElement('div'); two.className = 'mcard-r two';
       let accShort = '';
-      if (rAcc) { const c = rAcc.querySelector('.v .chip') || rAcc.querySelector('.v'); if (c) accShort = (c.textContent || '').split(/[｜|]/)[0].trim(); }
+      if (rAcc) {
+        const names = [];
+        rAcc.querySelectorAll('.v .chip').forEach(c => { const s = (c.textContent || '').split(/[｜|]/)[0].trim(); if (s) names.push(s); });
+        if (!names.length) { const c = rAcc.querySelector('.v'); if (c) { const s = (c.textContent || '').split(/[｜|]/)[0].trim(); if (s) names.push(s); } }
+        accShort = names.join('／');
+        rAcc.remove();
+      }
       if (accShort) { const s = document.createElement('span'); s.className = 'acc'; s.textContent = accShort; two.appendChild(s); }
       [[rRew, '報酬額'], [rPost, '投稿日']].forEach(([r, lab]) => {
         const pair = document.createElement('span'); pair.className = 'pair';
@@ -3916,7 +3921,6 @@ function packCampCards() {
         let out = '';
         if (bEl && bEl.textContent.trim()) out += '<i class="insb">' + esc(bEl.textContent.replace(/\s+/g, ' ').trim()) + '</i>';
         if (er) out += '<i class="insb">' + esc(er) + '</i>';
-        if (cnt) out += '<i class="insn">' + esc(cnt) + '</i>';
         if (out) btn.innerHTML = out;
       }
     }
@@ -5012,6 +5016,10 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .mcard .ins-btn{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;border:0;background:transparent;padding:0;box-shadow:none;min-height:0}
   #view-campaigns .mcard .insb{font-style:normal;font-weight:800;font-size:11px;color:var(--mori);background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-family:var(--mono)}
   #view-campaigns .mcard .insn{font-style:normal;font-size:10.5px;color:var(--cha);font-weight:700}
+  #view-campaigns .mcard-r.ins{flex-wrap:nowrap;align-items:center}
+  #view-campaigns .mcard-r.ins .k{flex:0 0 auto;white-space:nowrap}
+  #view-campaigns .mcard-r.ins .v{margin-left:auto;white-space:nowrap}
+  #view-campaigns .mcard-r.two .acc{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
 </style>
 <div id="devPreview" aria-hidden="true">
