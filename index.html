@@ -1336,13 +1336,7 @@ const accName = id => { const a = accById(id); return a ? a.name : '（未設定
    ①「｜」「|」などの区切りの前（＝運用上の短い名前）を優先表示
    ②それを超えても15文字を超える場合のみ「...」で省略 */
 const ellip15 = s => { const a = Array.from(String(s === undefined || s === null ? '' : s)); return a.length > 15 ? a.slice(0, 15).join('') + '...' : a.join(''); };
-const ACC_SEP = /[|｜∣❘❙❚‖│┃┆┇┊┋Ⅱ]/;
-const accLabel = s => {
-  const raw = String(s === undefined || s === null ? '' : s);
-  const parts = raw.split(ACC_SEP);
-  const head = parts.length > 1 ? parts[0].trim() : '';
-  return ellip15(head || raw);
-};
+const accLabel = s => ellip15(String(s === undefined || s === null ? '' : s));
 const accFollowers = id => { const a = accById(id); return a ? (Number(a.followers) || 0) : 1; };
 
 /* 派生指標 */
