@@ -277,10 +277,18 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .field label{font-size:11px;font-weight:700;color:var(--cha);letter-spacing:.04em}
 .field input,.field select,.field textarea{
   border:1px solid var(--line);background:#fff;border-radius:7px;padding:9px 11px;font-size:13px;
-  width:100%;
+  width:100%;box-sizing:border-box;min-width:0;
 }
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--mori-3)}
 .field textarea{resize:vertical;min-height:64px}
+/* iOS Safari で type=date / type=datetime-local が中央寄せ・幅ふくらみになるのを抑止 */
+.field input[type="date"],.field input[type="datetime-local"]{
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;
+  text-align:left;display:block;width:100%;box-sizing:border-box;
+  min-height:40px;line-height:1.3;
+}
+.field input[type="date"]::-webkit-date-and-time-value,
+.field input[type="datetime-local"]::-webkit-date-and-time-value{text-align:left;margin:0}
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .switch{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;cursor:pointer}
 .switch input{width:auto;accent-color:var(--mori)}
@@ -5508,6 +5516,8 @@ go(VIEW_TITLES[h] ? h : 'dash');
 .fab-add:active{transform:translateY(0);box-shadow:0 3px 10px rgba(0,0,0,.20)}
 .fab-add:focus-visible{outline:3px solid var(--kohaku);outline-offset:3px}
 @media (max-width:860px){body[data-view="campaigns"] .fab-add{display:flex}}
+/* モーダル表示中(#modal.on)は FAB を隠す */
+#modal.on ~ .fab-add{display:none!important}
 </style>
 <div id="devPreview" aria-hidden="true">
   <div class="dev-box">
