@@ -1955,6 +1955,7 @@ function campForm(c, presetAcc) {
     <div class="field"><label>訪問日時（撮影・試食）</label><input name="visitAt" type="datetime-local" value="${esc(d.visitAt || '')}"></div>
     <div class="field"><label>投稿日 / 投稿予定日</label><input name="date" type="date" value="${esc(d.date)}"></div>
     <div class="field"><label>報酬額（税込・円）</label><input name="reward" type="number" min="0" step="1000" value="${esc(d.reward)}"></div>
+    <div class="field wide" id="cfPerAcc" hidden></div>
     <div class="field"><label>ステータス</label><select name="status">${STATUSES.map(x => `<option ${x === d.status ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>種別</label><select name="type">${TYPES.map(t => `<option ${t === d.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
     <div class="field wide"><label>メモ</label><textarea name="note" placeholder="条件・二次利用・NG事項など">${esc(d.note)}</textarea></div>
@@ -1971,9 +1972,30 @@ function openCamp(id, presetAcc) {
   openModal(c ? '案件を編集' : '案件を登録', campForm(c, presetAcc));
   const form = document.getElementById('campForm');
   if (!form) return;
-  const upd = () => {
-    const r = Number(form.elements.reward.value) || 0;
+  const perBox = document.getElementById('cfPerAcc');
+  let perSig = '';
+  const renderPer = () => {
     const sel = [...form.querySelectorAll('input[name="accountIds"]:checked')].map(x => x.value);
+    if (!perBox) return sel;
+    const multi = sel.length > 1;
+    perBox.hidden = !multi;
+    if (!multi) { form.elements.reward.readOnly = false; perSig = ''; return sel; }
+    const sig = sel.join('|');
+    if (sig !== perSig) {
+      perSig = sig;
+      const seed = c || {}; const rw = seed.rewards || {}; const dt = seed.accDates || {};
+      perBox.innerHTML = sel.map(id => `<div class="per-row"><span class="an">${esc(accName(id))}</span>` +
+        `<input data-rw="${esc(id)}" type="number" min="0" step="1000" value="${rw[id] !== undefined ? esc(rw[id]) : ''}" placeholder="報酬額">` +
+        `<input data-dt="${esc(id)}" type="date" value="${esc(dt[id] || seed.date || ymd(TODAY))}"></div>`).join('');
+    }
+    const sum = [...perBox.querySelectorAll('input[data-rw]')].reduce((s2, i) => s2 + (Number(i.value) || 0), 0);
+    form.elements.reward.readOnly = true;
+    form.elements.reward.value = sum;
+    return sel;
+  };
+  const upd = () => {
+    const sel = renderPer();
+    const r = Number(form.elements.reward.value) || 0;
     const f = sel.reduce((acc, x) => acc + accFollowers(x), 0);
     const unit = f ? r / f : 0;
     const [lo, hi] = [f * 2, f * 4];
@@ -1998,12 +2020,21 @@ function openCamp(id, presetAcc) {
     const v = n => form.elements[n].value;
     const accountIds = [...form.querySelectorAll('input[name="accountIds"]:checked')].map(x => x.value);
     if (!accountIds.length) { toast('投稿アカウントを1つ以上選んでください'); return; }
+    const rewards = {}, accDates = {}; let filled = 0, sumRw = 0;
+    form.querySelectorAll('#cfPerAcc input[data-rw]').forEach(i => { if (i.value !== '') { rewards[i.dataset.rw] = Number(i.value) || 0; filled++; sumRw += Number(i.value) || 0; } });
+    form.querySelectorAll('#cfPerAcc input[data-dt]').forEach(i => { if (i.value) accDates[i.dataset.dt] = i.value; });
+    const multi = accountIds.length > 1;
+    const firstDate = Object.keys(accDates).map(k => accDates[k]).sort()[0];
     const data = {
       client: v('client').trim(), accountIds,
-      type: v('type'), reward: Number(v('reward')) || 0, status: v('status'),
-      date: v('date'), visitAt: v('visitAt'),
+      type: v('type'), reward: multi ? (filled ? sumRw : ((c && c.reward) || Number(v('reward')) || 0)) : (Number(v('reward')) || 0), status: v('status'),
+      date: (multi && firstDate) ? firstDate : v('date'), visitAt: v('visitAt'),
       note: v('note').trim()
     };
+    if (multi) {
+      data.rewards = Object.keys(rewards).length ? rewards : ((c && c.rewards) || {});
+      data.accDates = Object.keys(accDates).length ? accDates : ((c && c.accDates) || {});
+    }
     if (c) Object.assign(c, data);
     else DB.campaigns.push(Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data));
     save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
@@ -3888,6 +3919,29 @@ function packCampCards() {
       acts.querySelectorAll('button[data-inv]').forEach(b => { if (b.textContent.trim() === '発行') b.textContent = '請求書発行'; });
       if (acts.childNodes.length) head.appendChild(acts);
     }
+    const _camp = card.dataset.rec ? campById(card.dataset.rec) : null;
+    const _accs = _camp ? campAccs(_camp) : [];
+    if (_camp && _accs.length > 1) {
+      live().forEach(r => { const k = r.querySelector('.k'); const lb = k ? k.textContent : ''; if (/アカウント|報酬|投稿日|インサイト/.test(lb)) r.remove(); });
+      const mm = campInsight(_camp);
+      const box = document.createElement('div'); box.className = 'pacc';
+      box.innerHTML = _accs.map(a => {
+        const rw = (_camp.rewards && _camp.rewards[a.id] !== undefined) ? yen(_camp.rewards[a.id]) : yen(_camp.reward);
+        const dt = (_camp.accDates && _camp.accDates[a.id]) ? _camp.accDates[a.id] : _camp.date;
+        const by = mm.byAcc[a.id];
+        const pp2 = mm.posts.filter(x => x.accountId === a.id);
+        const er2 = pp2.length ? pp2.reduce((s2, x) => s2 + metrics(x).er, 0) / pp2.length : 0;
+        const ins = (by && by.posts)
+          ? `<button class="ins-btn" data-ins-camp="${esc(_camp.id)}" data-ins-acc="${esc(a.id)}"><i class="insb">リーチ ${wan(by.reach)}</i><i class="insb">ER ${er2.toFixed(2)}%</i></button>`
+          : `<button class="ins-btn empty" data-ins-camp="${esc(_camp.id)}" data-ins-acc="${esc(a.id)}">＋ 画像を取り込む</button>`;
+        return `<div class="pacc-b"><div class="pacc-h"><span class="acc">${esc(String(a.name).split(/[｜|]/)[0].trim())}</span><span class="pair"><span class="k">報酬額</span><b>${rw}</b></span></div>`
+          + `<div class="mcard-r"><span class="k">投稿日</span><span class="v">${esc(jYMD(dt))}</span></div>`
+          + `<div class="mcard-r ins"><span class="k">インサイト情報</span><span class="v">${ins}</span></div></div>`;
+      }).join('');
+      card.appendChild(box);
+      card.dataset.packed = '1';
+      return;
+    }
     if (rRew && rPost) {
       const two = document.createElement('div'); two.className = 'mcard-r two';
       let accShort = '';
@@ -3987,7 +4041,7 @@ document.addEventListener('click', e => {
   }
   if (t.dataset.openCamp) openCamp(t.dataset.openCamp);
   else if (t.dataset.inv) openInvoice(t.dataset.inv);
-  else if (t.dataset.insCamp) openInsightImport(t.dataset.insCamp);
+  else if (t.dataset.insCamp) openInsightImport(t.dataset.insCamp, t.dataset.insAcc || '');
   else if (t.dataset.dropCamp) {
     const cc = campById(t.dataset.dropCamp);
     if (cc) { cc.dropped = !cc.dropped; save(); render(); toast(cc.dropped ? '見送りにしました' : '進行中に戻しました'); }
@@ -5020,7 +5074,19 @@ go(VIEW_TITLES[h] ? h : 'dash');
   #view-campaigns .mcard-r.ins .k{flex:0 0 auto;white-space:nowrap}
   #view-campaigns .mcard-r.ins .v{margin-left:auto;white-space:nowrap}
   #view-campaigns .mcard-r.two .acc{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #view-campaigns .pacc{margin-top:6px}
+  #view-campaigns .pacc-b{padding:7px 0 2px;border-top:1px dashed var(--line)}
+  #view-campaigns .pacc-b:first-child{border-top:0;padding-top:0}
+  #view-campaigns .pacc-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:2px}
+  #view-campaigns .pacc-h .acc{font-size:11.5px;font-weight:900;color:var(--mori)}
+  #view-campaigns .pacc-h .pair{display:inline-flex;gap:5px;align-items:baseline}
+  #view-campaigns .pacc-h b{font-family:var(--mono);font-size:12.5px}
+  #view-campaigns .pacc .mcard-r{padding:1.5px 0}
 }
+.per-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 0;border-top:1px dashed var(--line)}
+.per-row:first-child{border-top:0}
+.per-row .an{font-size:11.5px;font-weight:800;flex:1 1 100%}
+.per-row input{flex:1 1 45%;min-width:0}
 </style>
 <div id="devPreview" aria-hidden="true">
   <div class="dev-box">
