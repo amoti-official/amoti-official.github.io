@@ -3082,14 +3082,33 @@ function renderAccounts() {
 }
 function apiKeys() { if (!DB.api) DB.api = {}; return DB.api; }
 
-function igExtractId(token) {
-  return fetch('https://graph.facebook.com/v21.0/me/accounts?fields=name,instagram_business_account{id,username}&limit=50&access_token=' + encodeURIComponent(token))
-    .then(r => r.json()).then(j => {
-      if (j.error) throw new Error(j.error.message || 'Meta APIエラー');
-      const hit = (j.data || []).filter(x => x.instagram_business_account && x.instagram_business_account.id);
-      if (!hit.length) throw new Error('連携されたInstagramビジネスアカウントが見つかりません（Facebookページと連携したプロアカウントが必要です）');
-      return { id: hit[0].instagram_business_account.id, username: hit[0].instagram_business_account.username || '', page: hit[0].name || '' };
-    });
+async function igExtractId(token) {
+  // ルートA：/me/accounts（Facebookページ経由：pages_show_list権限が必要）
+  try {
+    const r1 = await fetch('https://graph.facebook.com/v21.0/me/accounts?fields=name,instagram_business_account{id,username}&limit=50&access_token=' + encodeURIComponent(token));
+    const j1 = await r1.json();
+    if (!j1.error) {
+      const hit = (j1.data || []).filter(x => x.instagram_business_account && x.instagram_business_account.id);
+      if (hit.length) return { id: hit[0].instagram_business_account.id, username: hit[0].instagram_business_account.username || '', page: hit[0].name || '' };
+    }
+  } catch (e) {}
+  // ルートB：/me?fields=instagram_business_account（Facebookページトークン or 単一ページ）
+  try {
+    const r2 = await fetch('https://graph.facebook.com/v21.0/me?fields=instagram_business_account{id,username},name,id&access_token=' + encodeURIComponent(token));
+    const j2 = await r2.json();
+    if (!j2.error && j2.instagram_business_account && j2.instagram_business_account.id) {
+      return { id: j2.instagram_business_account.id, username: j2.instagram_business_account.username || '', page: j2.name || '' };
+    }
+  } catch (e) {}
+  // ルートC：Instagramログイン方式（graph.instagram.com/me）
+  try {
+    const r3 = await fetch('https://graph.instagram.com/me?fields=id,username,account_type&access_token=' + encodeURIComponent(token));
+    const j3 = await r3.json();
+    if (!j3.error && j3.id) {
+      return { id: j3.id, username: j3.username || '', page: '(Instagramログイン方式：自分のアカウントのみ取得可)' };
+    }
+  } catch (e) {}
+  throw new Error('連携されたInstagramビジネスアカウントが見つかりません。トークン発行時に「Facebookページ」と「instagram_basic / pages_show_list / pages_read_engagement」権限を付与しているか、Graph API Explorerで確認してください。');
 }
 
 function renderApiForm() {
@@ -5764,7 +5783,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260922-1031Z';
+const SB_BUILD = '20260922-2103Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
