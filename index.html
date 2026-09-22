@@ -1354,17 +1354,12 @@ function normalize(d) {
     if (ST_MAP[c.status]) c.status = ST_MAP[c.status];
     if (STATUSES.indexOf(c.status) < 0) c.status = '進行中';
     c.invoicedAt = c.invoicedAt || '';
-    /* 旧データ移行：c.type（PR案件・モニター等）が GENRES に一致する場合のみ c.genre に移す。
-       PR案件など「案件種別」で GENRES に無い値は誤フォールバックの原因になるため無視する。 */
-    if ((!c.genre || c.genre === '未設定') && c.type && GENRES.indexOf(c.type) >= 0) {
-      c.genre = c.type;
-    }
-    /* c.type は今後使わない。削除ではなく空文字で上書きする（recFieldMerge が「あるフィールド vs 無いフィールド」を「あるほう」で復活させてしまう問題への対策）。
-       あわせて _ft.type / _ft.rewards.type などの旧タイムスタンプメタも掃除する */
-    c.type = '';
-    if (c._ft && typeof c._ft === 'object') { try { delete c._ft.type; } catch (e) {} }
-    if (!c.genre) c.genre = '未設定';
-    if (!c.priceRange) c.priceRange = '未設定';
+    /* 【重要】normalize は「毎回のロード」で走るため、ここで c.type や c.genre を書き換えると
+       recStamp が「変更あり」と誤検出して _t を新しくしてしまい、他端末で保存した値をロード時に上書きしてしまう。
+       絶対にフィールドを書き換えない（既に値があれば触らない、無い場合のみデフォルト） */
+    if (c.genre === undefined || c.genre === null) c.genre = '未設定';
+    if (c.priceRange === undefined || c.priceRange === null) c.priceRange = '未設定';
+    /* c.type は表示側では既に使っていないため、存在するまま放置する（触ると _t が更新されて事故になる） */
     return c;
   });
   return d;
@@ -1375,8 +1370,8 @@ function storageOK() {
 }
 function save() {
   if (window.__PV) return;   // プレビュー内の操作は保存しない
-  /* 保存前に必ず正規化：旧 c.type を空文字に上書きし、genre/priceRange のデフォルトを保証 */
-  try { DB = normalize(DB); } catch (e) {}
+  /* save() 前の全案件正規化は絶対にやらない：他フィールドを触ると _t が新しくなり
+     別端末で保存した値をロード時に上書きしてしまう恒久バグの元凶になる */
   try { recStamp(); } catch (e) {}
   try { DB.savedAt = new Date().toISOString(); localStorage.setItem(KEY, JSON.stringify(DB)); }
   catch (e) {
@@ -2144,7 +2139,6 @@ function openCamp(id, presetAcc, opts) {
     const data = {
       client: v('client').trim(), accountIds,
       genre: _genre, priceRange: _price,
-      type: '',  /* 旧仕様の残骸を必ず空文字で上書き */
       reward: multi ? (filled ? sumRw : ((c && c.reward) || Number(v('reward')) || 0)) : (Number(v('reward')) || 0), status: v('status'),
       date: (multi && firstDate) ? firstDate : v('date'), visitAt: v('visitAt'),
       note: v('note').trim()
@@ -2154,27 +2148,26 @@ function openCamp(id, presetAcc, opts) {
       data.accDates = Object.keys(accDates).length ? accDates : ((c && c.accDates) || {});
     }
     if (c) {
+      /* 変わったフィールドを検出して、そのフィールドの _ft だけを最新時刻で刻む（他のフィールドは触らない） */
+      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
+      const _changed = [];
+      Object.keys(data).forEach(function (f) {
+        var oldV = c[f], newV = data[f];
+        var same = (typeof oldV === 'object' && oldV !== null) ? (JSON.stringify(oldV) === JSON.stringify(newV)) : (oldV === newV);
+        if (!same) _changed.push(f);
+      });
       Object.assign(c, data);
-      /* recFieldMerge の「新しい方勝ち」で必ず勝てるよう、フィールドタイムスタンプを最新化。
-         リモートに一時的な時刻ずれや将来スタンプがあっても勝てるよう、少し先の時刻を割り当てる（sbFixTs の上限 sbNow+2000 を超えない範囲で 1500ms 加算） */
-      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
-      c._ft = c._ft || {};
-      /* 全フィールドを一律に最新化して、data の全項目が確実に「勝ち」になるようにする */
-      const _all = ['client', 'accountIds', 'genre', 'priceRange', 'type', 'reward', 'status', 'date', 'visitAt', 'note', 'rewards', 'accDates', 'dropped'];
-      _all.forEach(function (f) { c._ft[f] = _now; });
-      c._t = _now;
-      /* localStorage の snap も同期しておく：次回 recStamp 時に「差分なし」と誤判定されないよう、
-         このレコードだけ snap を消して recStamp に「初回扱い」させる */
-      try {
-        var _snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
-        if (_snap && _snap.__v === 3) { delete _snap['camp:' + c.id]; localStorage.setItem('amoti_snap', JSON.stringify(_snap)); }
-      } catch (e) {}
+      if (_changed.length) {
+        c._ft = c._ft || {};
+        _changed.forEach(function (f) { c._ft[f] = _now; });
+        c._t = _now;
+      }
     } else {
       const newC = Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data);
-      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
+      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
       newC._t = _now;
       newC._ft = {};
-      ['client','accountIds','genre','priceRange','type','reward','status','date','visitAt','note','rewards','accDates','dropped'].forEach(function (f) { newC._ft[f] = _now; });
+      Object.keys(newC).forEach(function (f) { if (f !== '_t' && f !== '_ft') newC._ft[f] = _now; });
       DB.campaigns.push(newC);
     }
     save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
@@ -4737,22 +4730,18 @@ function gpOpenPicker(campId, field, anchor) {
   list.querySelectorAll('.gpp-opt').forEach(function (b) {
     b.onclick = function () {
       const val = b.dataset.gppVal;
-      /* 即保存：フィールドを書き換え、フィールドタイムスタンプを未来時刻で刻む → 同期で必ず勝つ */
+      if (c[field] === val) { gpClosePicker(); return; }
+      /* 即保存：変更されたフィールドだけを最新時刻で刻む（他フィールドは触らない） */
       c[field] = val;
-      c.type = '';  /* 旧仕様の残骸を除去 */
-      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
+      const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
       c._ft = c._ft || {};
       c._ft[field] = _now;
-      c._ft.type = _now;
       c._t = _now;
-      /* snap からこのレコードを消して次回の recStamp で確実に再スタンプさせる */
-      try {
-        var _snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
-        if (_snap && _snap.__v === 3) { delete _snap['camp:' + c.id]; localStorage.setItem('amoti_snap', JSON.stringify(_snap)); }
-      } catch (e) {}
       save();
       gpClosePicker();
       render();
+      /* 即同期でリモートへ push（Supabase 側を確実に更新） */
+      try { if (typeof shPushNow === 'function') shPushNow(); } catch (e) {}
       toast((field === 'genre' ? 'ジャンル' : '客単価') + ' を「' + val + '」に更新しました');
     };
   });
@@ -5341,8 +5330,13 @@ function recFieldMerge(x, y) {
   const keys = new Set(Object.keys(x).concat(Object.keys(y)));
   keys.forEach(function (f) {
     if (f === '_t' || f === '_ft') return;
-    const sx = Number(fx[f] !== undefined ? fx[f] : (f in x ? tx : -1));
-    const sy = Number(fy[f] !== undefined ? fy[f] : (f in y ? ty : -1));
+    /* フィールド固有スタンプが両方無い場合のみ _t を代用（片方だけ持っている場合、
+       明示スタンプ側を常に優先させるためスコアを 0 に落とす）
+       これがないと「片方は正しく genre を保存済み・もう片方は _t だけ新しい古い状態」で
+       古い状態が勝ってしまう */
+    const hasFx = (fx[f] !== undefined), hasFy = (fy[f] !== undefined);
+    const sx = Number(hasFx ? fx[f] : (hasFy ? 0 : (f in x ? tx : -1)));
+    const sy = Number(hasFy ? fy[f] : (hasFx ? 0 : (f in y ? ty : -1)));
     if (sx <= -1 && sy <= -1) return;
     let takeX;
     if (sx > sy) takeX = true;
@@ -5397,13 +5391,6 @@ function recStamp() {
       else if (ft[f] === undefined) { ft[f] = Number(r._t || t); }
     });
     Object.keys(prev).forEach(function (f) { if (!(f in now)) { ft[f] = t; changed = true; } });
-    /* 案件レコード：genre/priceRange のタイムスタンプが _t より古い場合、_t に揃える。
-       過去に同期エンジンで戻された「未設定」上書きの影響でスタンプが古いまま残っている場合の救済 */
-    if (k.indexOf('camp:') === 0 && r._t) {
-      ['genre', 'priceRange', 'type'].forEach(function (f) {
-        if (ft[f] === undefined || Number(ft[f]) < Number(r._t)) ft[f] = Number(r._t);
-      });
-    }
     if (changed) r._t = t;
     snap[k] = now;
   });
@@ -5427,10 +5414,8 @@ async function shSync(manual) {
 
     let db = DB, got = 0;
     if (remote) {
-      try { remote = normalize(remote); } catch (e) {}
       const before = JSON.stringify(recSplit(DB));
       db = recMerge(DB, remote);
-      try { db = normalize(db); } catch (e) {}
       if (JSON.stringify(recSplit(db)) !== before) got = 1;
     }
     const payload = Object.assign({}, db, { api: {} });
@@ -5590,7 +5575,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260922-0009Z';
+const SB_BUILD = '20260922-0025Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
@@ -5751,12 +5736,11 @@ async function shSync(manual) {
       DB.api.sbIn = inc;
     } catch (e) {}
     if (remote) {
-      /* remote 側も先に正規化して、旧 c.type='PR案件' が復活しないようにする */
-      try { remote = normalize(remote); } catch (e) {}
+      /* 【重要】ここで normalize(remote) や normalize(db) を挟むと、
+         全案件レコードの _t を書き換えてしまい、他端末で保存した値をロード時に上書きしてしまう。
+         マージそのものは recFieldMerge の判定に任せ、余計な触り方はしない */
       const before = sbCanon(recSplit(db));
       db = recMerge(db, remote);
-      /* マージ直後も正規化 */
-      try { db = normalize(db); } catch (e) {}
       if (sbCanon(recSplit(db)) !== before) got = 1;
     }
     const payload = Object.assign({}, db, { api: {} });

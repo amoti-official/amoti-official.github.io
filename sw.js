@@ -1,5 +1,5 @@
 /* GOURMET OS — Service Worker（network-first / offline fallback） */
-const CACHE = 'gourmet-os-v3-20260922-0009';
+const CACHE = 'gourmet-os-v3-20260922-0025';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
