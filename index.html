@@ -376,6 +376,22 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .mcard-gp{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 8px}
 .mcard-gp .gp-chip{display:inline-block;padding:2px 8px;font-size:11px;font-weight:800;color:var(--mori);background:#fff;border:1px solid var(--line);border-radius:999px;line-height:1.5}
 .mcard-gp .gp-chip.empty{color:var(--cha);background:transparent;font-weight:500}
+/* 案件カード：ジャンル/客単価タップで即保存 */
+.gp-tap{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;font-family:var(--sans);cursor:pointer;text-align:left;line-height:1.5;transition:background .12s,border-color .12s;-webkit-tap-highlight-color:transparent}
+.gp-tap.set{color:var(--shu);background:#fff;border:1.4px solid var(--shu)}
+.gp-tap.empty{color:var(--cha);background:transparent;border:1.4px dashed var(--line);font-weight:600}
+.gp-tap:hover{background:#faf3ee}
+.gp-tap:focus-visible{outline:2px solid var(--kohaku);outline-offset:2px}
+/* 選択ポップオーバー */
+#gpPop{position:fixed;inset:0;z-index:9600;display:none;align-items:center;justify-content:center;background:rgba(30,20,25,.42)}
+#gpPop.on{display:flex}
+#gpPop .gpp-box{background:#fff;border-radius:14px;padding:16px 18px 14px;min-width:280px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+#gpPop .gpp-h{font-size:13px;font-weight:900;color:var(--mori);margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed var(--line)}
+#gpPop .gpp-list{display:flex;flex-direction:column;gap:6px}
+#gpPop .gpp-opt{padding:10px 14px;font-size:13px;font-weight:800;color:var(--mori);background:#fff;border:1.4px solid var(--line);border-radius:8px;cursor:pointer;text-align:left;font-family:inherit;transition:background .12s,color .12s,border-color .12s}
+#gpPop .gpp-opt:hover{background:var(--shu);border-color:var(--shu);color:#fff}
+#gpPop .gpp-opt.on{background:var(--mori);border-color:var(--mori);color:#fff}
+#gpPop .gpp-close{margin-top:12px;width:100%;padding:8px;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--cha);cursor:pointer;font-family:inherit}
 .gp-list{display:flex;flex-direction:column;gap:8px}
 .gp-row{display:grid;grid-template-columns:170px 1fr;gap:12px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
 .gp-row .gp-lab{display:flex;flex-direction:column;line-height:1.35}
@@ -2003,7 +2019,10 @@ function renderCampaigns() {
       const flag = c.dropped ? 'var(--cha)' : late ? 'var(--shu)' : c.status === '入金済' ? 'var(--ok)' : c.status === '請求中' ? 'var(--kohaku)' : 'var(--mori-3)';
       return `<tr class="rec ${open ? 'open' : ''}" data-rec="${esc(c.id)}">
         <td><span class="rec-dot" style="background:${flag}" title="${c.dropped ? '見送り' : c.status}"></span></td>
-        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}<div style="font-size:10.5px;font-weight:700;color:var(--mori-3);margin-top:3px;line-height:1.4;font-family:var(--sans);text-align:left">${(c.genre && c.genre !== '未設定') ? esc(c.genre) : '<span style="color:var(--cha);font-weight:500">ジャンル未登録</span>'}<br>${(c.priceRange && c.priceRange !== '未設定') ? esc(c.priceRange) : '<span style="color:var(--cha);font-weight:500">客単価未登録</span>'}</div></td>
+        <td class="num">${v ? esc(jDT(c.visitAt)) : '<span style="color:var(--cha)">未定</span>'}<div class="gp-tap-wrap" style="margin-top:3px;line-height:1.4;font-family:var(--sans);text-align:left;display:flex;flex-direction:column;gap:2px">
+          <button type="button" class="gp-tap ${(c.genre && c.genre !== '未設定') ? 'set' : 'empty'}" data-gp-camp="${esc(c.id)}" data-gp-field="genre">${(c.genre && c.genre !== '未設定') ? esc(c.genre) : 'ジャンル未登録'}</button>
+          <button type="button" class="gp-tap ${(c.priceRange && c.priceRange !== '未設定') ? 'set' : 'empty'}" data-gp-camp="${esc(c.id)}" data-gp-field="priceRange">${(c.priceRange && c.priceRange !== '未設定') ? esc(c.priceRange) : '客単価未登録'}</button>
+        </div></td>
         <td>${campHead(c)}</td>
         <td>${accs.length ? accs.map(a => `<span class="chip" style="margin:0 3px 3px 0" title="${esc(a.name)}">${esc(accLabel(a.name))}</span>`).join('') : '<span style="font-size:11.5px;color:var(--cha)">未設定</span>'}</td>
         <td class="num r">${yen(c.reward)}</td>
@@ -4694,8 +4713,60 @@ function refreshFilterSelects() {
   document.getElementById('iPeriod').value = insFilter.period;
 }
 
+/* ジャンル・客単価を「押下即保存」で編集するピッカー */
+function gpOpenPicker(campId, field, anchor) {
+  const c = campById(campId); if (!c) return;
+  const opts = (field === 'genre') ? GENRES : PRICE_RANGES;
+  const cur = c[field] || '未設定';
+  const title = (field === 'genre') ? 'ジャンルを選ぶ' : '客単価を選ぶ';
+  let pop = document.getElementById('gpPop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'gpPop';
+    pop.innerHTML = '<div class="gpp-box"><div class="gpp-h" id="gppH"></div><div class="gpp-list" id="gppList"></div><button type="button" class="gpp-close" id="gppClose">キャンセル</button></div>';
+    document.body.appendChild(pop);
+    pop.addEventListener('click', function (ev) { if (ev.target === pop) gpClosePicker(); });
+    document.getElementById('gppClose').onclick = gpClosePicker;
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') gpClosePicker(); });
+  }
+  document.getElementById('gppH').textContent = title;
+  const list = document.getElementById('gppList');
+  list.innerHTML = opts.map(function (o) {
+    return '<button type="button" class="gpp-opt' + (o === cur ? ' on' : '') + '" data-gpp-val="' + esc(o) + '">' + esc(o) + '</button>';
+  }).join('');
+  list.querySelectorAll('.gpp-opt').forEach(function (b) {
+    b.onclick = function () {
+      const val = b.dataset.gppVal;
+      /* 即保存：フィールドを書き換え、フィールドタイムスタンプを未来時刻で刻む → 同期で必ず勝つ */
+      c[field] = val;
+      c.type = '';  /* 旧仕様の残骸を除去 */
+      const _now = ((typeof sbNow === 'function') ? sbNow() : Date.now()) + 1500;
+      c._ft = c._ft || {};
+      c._ft[field] = _now;
+      c._ft.type = _now;
+      c._t = _now;
+      /* snap からこのレコードを消して次回の recStamp で確実に再スタンプさせる */
+      try {
+        var _snap = JSON.parse(localStorage.getItem('amoti_snap') || '{}');
+        if (_snap && _snap.__v === 3) { delete _snap['camp:' + c.id]; localStorage.setItem('amoti_snap', JSON.stringify(_snap)); }
+      } catch (e) {}
+      save();
+      gpClosePicker();
+      render();
+      toast((field === 'genre' ? 'ジャンル' : '客単価') + ' を「' + val + '」に更新しました');
+    };
+  });
+  pop.classList.add('on');
+}
+function gpClosePicker() {
+  const p = document.getElementById('gpPop'); if (p) p.classList.remove('on');
+}
+
 /* イベント（委譲） */
 document.addEventListener('click', e => {
+  /* ジャンル/客単価 押下即保存（他のハンドラより優先して処理し、tr.data-open-camp と競合させない） */
+  const gp = e.target.closest('[data-gp-camp]');
+  if (gp) { e.stopPropagation(); gpOpenPicker(gp.dataset.gpCamp, gp.dataset.gpField, gp); return; }
   const t = e.target.closest('[data-open-camp],[data-dup-camp],[data-del-camp],[data-edit-acc],[data-edit-post],[data-check],[data-acc-open],[data-view-jump],[data-open-camp-new],[data-inv],[data-ins-camp],[data-drop-camp],[data-set-st]');
   if (!t) return;
   if (t.dataset.setSt) {
@@ -5519,7 +5590,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260921-1140Z';
+const SB_BUILD = '20260922-0009Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
