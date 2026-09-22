@@ -3011,13 +3011,16 @@ function renderAccounts() {
         </div>
         <button class="btn sm ghost" data-edit-acc="${esc(a.id)}">編集</button>
       </div>
-      <div class="kpis" style="grid-template-columns:1fr 1fr;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
+      <div class="kpis" style="grid-template-columns:1fr 1fr 1fr;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
         <div class="kpi" style="padding-left:0;border:0">
-          <div class="k">フォロワー</div><div class="v" style="font-size:24px">${nf(a.followers)}</div>
+          <div class="k">フォロワー</div><div class="v" style="font-size:22px">${nf(a.followers)}</div>
           <div class="d">前日比 <b class="num" style="color:${dl1 >= 0 ? 'var(--ok)' : 'var(--shu)'}">${dl1 >= 0 ? '＋' : '−'}${nf(Math.abs(dl1))}</b></div></div>
         <div class="kpi" style="border:0">
-          <div class="k">平均リーチ</div><div class="v" style="font-size:24px">${avgN(recent, 'reach') === null ? '—' : wan(avgN(recent, 'reach'))}</div>
-          <div class="d">直近90日の投稿 <b class="num">${recent.length}</b>本の平均</div></div>
+          <div class="k">平均リーチ</div><div class="v" style="font-size:22px">${avgN(recent, 'reach') === null ? '—' : wan(avgN(recent, 'reach'))}</div>
+          <div class="d">直近90日 <b class="num">${recent.length}</b>本の平均</div></div>
+        <div class="kpi" style="border:0">
+          <div class="k">平均ER</div><div class="v" style="font-size:22px">${recent.length ? er.toFixed(2) + '%' : '—'}</div>
+          <div class="d">エンゲージメント率</div></div>
       </div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(86px,1fr));margin-top:6px">
         ${[['平均いいね', 'likes'], ['平均コメント', 'comments'], ['平均シェア', 'shares'], ['平均保存', 'saves']]
@@ -5573,7 +5576,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260922-0043Z';
+const SB_BUILD = '20260922-1026Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
