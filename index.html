@@ -5310,14 +5310,27 @@ async function fetchOneFollower(acc) {
       if (!n) throw new Error('フォロワー数が取得できませんでした');
       return n;
     }
-    /* Facebookログイン方式：business_discovery で他アカウントも取れる */
+    /* Facebookログイン方式 */
     let igId = String(k.igUserId || '').trim();
     if (!igId) { const info = await igExtractId(token); igId = info.id; k.igUserId = igId; save(); }
+    /* ルート1：自分のIG（保存済みigUserIdの本人）は直接 /{ig-id} で取得 */
+    try {
+      const rSelf = await fetch('https://graph.facebook.com/v21.0/' + igId + '?fields=username,followers_count&access_token=' + encodeURIComponent(token));
+      const jSelf = await rSelf.json();
+      if (!jSelf.error && jSelf.username) {
+        const un = String(jSelf.username).toLowerCase();
+        if (un === hd.toLowerCase()) {
+          const n = Number(jSelf.followers_count) || 0;
+          if (n) return n;
+        }
+      }
+    } catch (e) {}
+    /* ルート2：他アカウントは business_discovery（相手もプロアカウント必須） */
     const r = await fetch('https://graph.facebook.com/v21.0/' + igId + '?fields=business_discovery.username(' + encodeURIComponent(hd) + '){followers_count}&access_token=' + encodeURIComponent(token));
     const j = await r.json();
     if (j.error) throw new Error(j.error.message || 'Meta APIエラー');
     const n = Number(((j.business_discovery || {}).followers_count) || 0);
-    if (!n) throw new Error('フォロワー数が取れませんでした（プロアカウント以外は非対応）');
+    if (!n) throw new Error('フォロワー数が取れませんでした（相手側もプロアカウント必須）');
     return n;
   }
   throw new Error(acc.platform + ' は自動取得に対応していません（スクショから取り込んでください）');
@@ -5783,7 +5796,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260922-2103Z';
+const SB_BUILD = '20260922-2107Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
