@@ -2054,8 +2054,8 @@ function campForm(c, presetAcc, opts) {
       <div class="ins-acc">${DB.accounts.map(a => `<label><input type="checkbox" name="accountIds" value="${esc(a.id)}" ${ids.indexOf(a.id) >= 0 ? 'checked' : ''}><span class="an">${esc(accLabel(a.name))}</span><span class="am">${esc(a.platform)} / ${wan(a.followers)}</span></label>`).join('') || '<span style="font-size:12px;color:var(--cha)">アカウントが未登録です</span>'}</div></div>
     <div class="field"><label>訪問日時（撮影・試食）</label><input name="visitAt" type="datetime-local" value="${esc(d.visitAt || '')}"></div>
     <div class="field"><label>投稿日 / 投稿予定日</label><input name="date" type="date" value="${esc(d.date)}"></div>
-    <div class="field"><label>ジャンル</label><select name="genre">${GENRES.map(g => `<option ${g === (d.genre || '未設定') ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></div>
-    <div class="field"><label>客単価</label><select name="priceRange">${PRICE_RANGES.map(p => `<option ${p === (d.priceRange || '未設定') ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
+    <div class="field"><label>ジャンル</label><select name="genre">${GENRES.map(g => `<option value="${esc(g)}" ${g === (d.genre || '未設定') ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></div>
+    <div class="field"><label>客単価</label><select name="priceRange">${PRICE_RANGES.map(p => `<option value="${esc(p)}" ${p === (d.priceRange || '未設定') ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
     <div class="field"><label>報酬額（税込・円）</label><input name="reward" type="number" min="0" step="1000" value="${esc(d.reward)}"></div>
     <div class="field wide" id="cfPerAcc" hidden></div>
     <div class="field"><label>ステータス</label><select name="status">${STATUSES.map(x => `<option ${x === d.status ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
@@ -2148,20 +2148,15 @@ function openCamp(id, presetAcc, opts) {
       data.accDates = Object.keys(accDates).length ? accDates : ((c && c.accDates) || {});
     }
     if (c) {
-      /* 変わったフィールドを検出して、そのフィールドの _ft だけを最新時刻で刻む（他のフィールドは触らない） */
+      /* 「保存する」ボタン押下は data の全フィールドで確定する意思表示。
+         差分検出でスタンプを判定すると、文字列の見た目が同じでもバイト列が違うケース（NFC/NFD、全角/半角、ゼロ幅スペース）
+         や比較が誤って一致してしまう場合に _ft が更新されず、同期で古いリモート値に負けてしまう。
+         → data に含まれる全フィールドは無条件に最新時刻で刻む（この案件を今この場で確定する意思なので正しい仕様） */
       const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
-      const _changed = [];
-      Object.keys(data).forEach(function (f) {
-        var oldV = c[f], newV = data[f];
-        var same = (typeof oldV === 'object' && oldV !== null) ? (JSON.stringify(oldV) === JSON.stringify(newV)) : (oldV === newV);
-        if (!same) _changed.push(f);
-      });
       Object.assign(c, data);
-      if (_changed.length) {
-        c._ft = c._ft || {};
-        _changed.forEach(function (f) { c._ft[f] = _now; });
-        c._t = _now;
-      }
+      c._ft = c._ft || {};
+      Object.keys(data).forEach(function (f) { c._ft[f] = _now; });
+      c._t = _now;
     } else {
       const newC = Object.assign({ id: uid('c'), invoicedAt: '', dropped: false }, data);
       const _now = (typeof sbNow === 'function') ? sbNow() : Date.now();
@@ -2170,7 +2165,10 @@ function openCamp(id, presetAcc, opts) {
       Object.keys(newC).forEach(function (f) { if (f !== '_t' && f !== '_ft') newC._ft[f] = _now; });
       DB.campaigns.push(newC);
     }
-    save(); closeModal(); render(); toast(c ? '案件を更新しました' : '案件を登録しました');
+    save(); closeModal(); render();
+    /* バッジ経由の保存と同じく、モーダル経由の保存も直後に即push（Supabaseへ確実に反映） */
+    try { if (typeof shPushNow === 'function') shPushNow(); } catch (e) {}
+    toast(c ? '案件を更新しました' : '案件を登録しました');
   };
 }
 
@@ -5575,7 +5573,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260922-0025Z';
+const SB_BUILD = '20260922-0043Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
