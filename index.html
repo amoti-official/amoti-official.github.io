@@ -953,8 +953,12 @@ html{zoom:.7}
     <!-- ---------- 03 アカウント ---------- -->
     <section class="view" id="view-accounts" hidden>
       <div class="sec-title"><h2>アカウント一覧</h2>
+        <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn sm ghost" id="accAutoFetchBtn" title="登録済みAPIキーで全アカウントを一括取得">🔄 全アカウント自動取得</button>
+          <button class="btn sm" id="accManualRecordBtn">＋ 手入力で記録</button>
+        </span>
       </div>
-      
+      <div id="accAutoFetchMsg" style="margin-bottom:12px"></div>
       <div class="grid g-3" id="accountCards"></div>
       <div class="split">
         
@@ -1532,15 +1536,39 @@ function openFollow(preset) {
   }).join('');
   openModal('今日のフォロワーを記録', `<form id="followForm" class="fgrid">
     <div class="field wide"><div class="callout">各アカウントの今日のフォロワー数を入力して保存すると、1日1点の履歴として記録され、現在値・単価計算・フォロワー推移グラフに反映されます。</div></div>
+    <div class="field wide inline" style="gap:8px"><button type="button" class="btn primary" id="flAuto" style="flex:0 0 auto">🔄 全アカウント自動取得（APIから）</button><span style="font-size:11px;color:var(--cha)">Instagramプロアカウント／YouTube のみ（管理情報→外部連携でAPIキー設定）</span></div>
     <div class="field"><label>記録する日付</label><input name="date" type="date" value="${esc(ymd(TODAY))}"></div>
     <div class="field"><label>対象</label><input value="全アカウント（${DB.accounts.length}件）" readonly></div>
     ${rows}
+    <div class="field wide" id="flAutoMsg" style="font-size:12px"></div>
     <div class="field wide inline" style="justify-content:flex-end;padding-top:6px">
       <button type="button" class="btn ghost" id="flCancel">キャンセル</button>
       <button type="submit" class="btn primary">記録する</button>
     </div></form>`);
   const form = document.getElementById('followForm');
   document.getElementById('flCancel').onclick = closeModal;
+  const flAuto = document.getElementById('flAuto');
+  if (flAuto) flAuto.onclick = async () => {
+    const box = document.getElementById('flAutoMsg');
+    flAuto.disabled = true;
+    if (box) box.innerHTML = '<div class="callout">自動取得しています…</div>';
+    let updated = 0, failed = 0; const lines = [];
+    for (const a of DB.accounts) {
+      try {
+        const v = await fetchOneFollower(a);
+        const el = form.elements['f_' + a.id];
+        if (el) el.value = v;
+        const cur = Number(a.followers) || 0;
+        if (v !== cur) { lines.push(esc(a.name) + '：' + nf(cur) + ' → <b>' + nf(v) + '</b>'); updated++; }
+        else lines.push(esc(a.name) + '：変化なし（' + nf(v) + '）');
+      } catch (e) {
+        failed++;
+        lines.push('<span style="color:var(--shu)">' + esc(a.name) + '：' + esc(String((e && e.message) || e)) + '</span>');
+      }
+    }
+    if (box) box.innerHTML = '<div class="callout' + (failed ? ' warn' : '') + '"><b>取得完了：更新 ' + updated + ' 件</b>' + (failed ? '（失敗 ' + failed + ' 件）' : '') + '<br>' + lines.join('<br>') + '<br><br><b>「記録する」を押して保存してください。</b></div>';
+    flAuto.disabled = false;
+  };
   form.onsubmit = e => {
     e.preventDefault();
     const ds = form.elements.date.value || ymd(TODAY);
@@ -4822,6 +4850,43 @@ document.getElementById('adOpenSns').onclick = () => {
   window.open(u, '_blank', 'noopener');
 };
 document.getElementById('btnFollowNow').onclick = () => openFollow();
+(function () {
+  const abtn = document.getElementById('accAutoFetchBtn');
+  if (abtn) abtn.onclick = async () => {
+    const msg = document.getElementById('accAutoFetchMsg');
+    if (msg) msg.innerHTML = '<div class="callout">全アカウントのフォロワー数を自動取得しています…</div>';
+    abtn.disabled = true;
+    try {
+      const targets = (DB.accounts || []).slice();
+      let updated = 0, failed = 0;
+      const rows = [];
+      for (const a of targets) {
+        try {
+          const v = await fetchOneFollower(a);
+          const cur = Number(a.followers) || 0;
+          if (v && v !== cur) { recordFollow(a.id, v, ymd(TODAY)); rows.push(esc(a.name) + '：' + nf(cur) + ' → <b>' + nf(v) + '</b>'); updated++; }
+          else rows.push(esc(a.name) + '：変化なし（' + nf(v) + '）');
+        } catch (e) {
+          failed++;
+          rows.push('<span style="color:var(--shu)">' + esc(a.name) + '：' + esc(String((e && e.message) || e)) + '</span>');
+        }
+      }
+      DB.api = DB.api || {};
+      DB.api.lastAutoFollow = ymd(TODAY);
+      DB.api.lastAutoFollowAt = new Date().toISOString();
+      DB.api.lastAutoFollowResult = { updated, failed, skipped: 0, ts: Date.now() };
+      save(); render();
+      if (msg) msg.innerHTML = '<div class="callout' + (failed ? ' warn' : '') + '"><b>更新 ' + updated + ' 件</b>' + (failed ? '（失敗 ' + failed + ' 件）' : '') + '<br>' + rows.join('<br>') + '</div>';
+      toast('自動取得：更新 ' + updated + ' 件' + (failed ? ' / 失敗 ' + failed + ' 件' : ''));
+    } catch (e) {
+      if (msg) msg.innerHTML = '<div class="callout warn">エラー：' + esc(String((e && e.message) || e)) + '</div>';
+    } finally {
+      abtn.disabled = false;
+    }
+  };
+  const mbtn = document.getElementById('accManualRecordBtn');
+  if (mbtn) mbtn.onclick = () => openFollow();
+})();
 document.getElementById('btnFollowFile').onclick = () => document.getElementById('followFile').click();
 document.getElementById('btnFollowTpl').onclick = () => dl('followers_template.csv',
   toCsv(['日付', 'アカウント名', 'フォロワー'], [[ymd(TODAY), DB.accounts[0] ? DB.accounts[0].name : 'まい｜東京グルメ', '82500']]));
@@ -5081,6 +5146,7 @@ refreshFilterSelects();
   const anchor = document.getElementById('btnWipe');
   if (!anchor) return;
   try { ensureFollowSyncCard(); } catch (e) {}
+  try { ensureAutoFollowCard(); } catch (e) {}
   try { ensureSyncCard(); } catch (e) {}
   try { ensureSharedCard(); } catch (e) {}
   const host = anchor.closest('.card');
@@ -5187,6 +5253,128 @@ function ensureFollowSyncCard() {
   document.getElementById('fuNow').onclick = () => { saveUrl(); syncFollowers(true); };
 }
 setTimeout(() => { try { if (String(((DB.api || {}).followUrl) || '').trim() && ((DB.api || {}).lastFollowSync || '') !== ymd(TODAY)) syncFollowers(false); } catch (e) {} }, 1800);
+
+/* ========================================================================
+   フォロワー数の自動取得（アプリ内蔵・全アカウント一括）
+   - Instagram（プロアカウント）: Meta Graph API business_discovery
+   - YouTube: YouTube Data API v3
+   - TikTok / X / Threads: 公式APIから未認証で取れないため取得不可として通知
+   - 認証済みAPIキーがあるアカウントだけ処理し、失敗も含めた結果をレポート
+   ======================================================================== */
+async function fetchOneFollower(acc) {
+  const k = apiKeys();
+  const hd = String(acc.handle || '').replace(/^@/, '').trim();
+  if (!hd) throw new Error('ハンドル未設定');
+  if (acc.platform === 'YouTube') {
+    const key = String(k.yt || '').trim();
+    if (!key) throw new Error('YouTube APIキー未設定（管理情報→外部連携）');
+    const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=statistics&forHandle=' + encodeURIComponent(hd) + '&key=' + encodeURIComponent(key));
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message || 'YouTube APIエラー');
+    const it = (j.items || [])[0];
+    if (!it) throw new Error('チャンネルが見つかりません');
+    const n = Number(it.statistics && it.statistics.subscriberCount) || 0;
+    if (!n) throw new Error('登録者数が取得できませんでした');
+    return n;
+  }
+  if (acc.platform === 'Instagram') {
+    const token = String(k.fbToken || '').trim();
+    if (!token) throw new Error('Meta アクセストークン未設定（管理情報→外部連携）');
+    if (/^ig/i.test(token)) {
+      /* 自分のアカウントのみ取得可能 */
+      const r = await fetch('https://graph.instagram.com/v21.0/me?fields=username,followers_count&access_token=' + encodeURIComponent(token));
+      const j = await r.json();
+      if (j.error) throw new Error(j.error.message || 'Instagram APIエラー');
+      const un = String(j.username || '').toLowerCase();
+      if (un && un !== hd.toLowerCase()) throw new Error('このトークンは @' + j.username + ' 用（Facebookログイン方式が必要）');
+      const n = Number(j.followers_count) || 0;
+      if (!n) throw new Error('フォロワー数が取得できませんでした');
+      return n;
+    }
+    /* Facebookログイン方式：business_discovery で他アカウントも取れる */
+    let igId = String(k.igUserId || '').trim();
+    if (!igId) { const info = await igExtractId(token); igId = info.id; k.igUserId = igId; save(); }
+    const r = await fetch('https://graph.facebook.com/v21.0/' + igId + '?fields=business_discovery.username(' + encodeURIComponent(hd) + '){followers_count}&access_token=' + encodeURIComponent(token));
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message || 'Meta APIエラー');
+    const n = Number(((j.business_discovery || {}).followers_count) || 0);
+    if (!n) throw new Error('フォロワー数が取れませんでした（プロアカウント以外は非対応）');
+    return n;
+  }
+  throw new Error(acc.platform + ' は自動取得に対応していません（スクショから取り込んでください）');
+}
+
+async function autoFetchAllFollowers(manual, silent) {
+  const targets = (DB.accounts || []).slice();
+  if (!targets.length) { if (manual) toast('アカウントが未登録です'); return { updated: 0, failed: 0 }; }
+  let updated = 0, failed = 0, skipped = 0;
+  const rows = [];
+  for (const a of targets) {
+    try {
+      const v = await fetchOneFollower(a);
+      const cur = Number(a.followers) || 0;
+      if (v && v !== cur) {
+        recordFollow(a.id, v, ymd(TODAY));
+        rows.push(esc(a.name) + '：' + nf(cur) + ' → ' + nf(v));
+        updated++;
+      } else if (v === cur) {
+        rows.push(esc(a.name) + '：変化なし（' + nf(v) + '）');
+      }
+    } catch (e) {
+      failed++;
+      rows.push('<span style="color:var(--shu)">' + esc(a.name) + '：' + esc(String((e && e.message) || e)) + '</span>');
+    }
+  }
+  DB.api = DB.api || {};
+  DB.api.lastAutoFollow = ymd(TODAY);
+  DB.api.lastAutoFollowAt = new Date().toISOString();
+  DB.api.lastAutoFollowResult = { updated, failed, skipped, ts: Date.now() };
+  save(); render();
+  const msg = document.getElementById('afMsg');
+  if (msg) {
+    msg.innerHTML = '<div class="callout' + (failed ? ' warn' : '') + '"><b>' + updated + ' 件のフォロワー数を更新しました</b>' + (failed ? '（失敗 ' + failed + ' 件）' : '') + '<br>' + rows.join('<br>') + '</div>';
+  }
+  if (!silent) { toast('自動取得：更新 ' + updated + ' 件' + (failed ? ' / 失敗 ' + failed + ' 件' : '')); }
+  return { updated, failed };
+}
+
+function ensureAutoFollowCard() {
+  const anchor = document.getElementById('btnWipe');
+  if (!anchor) return;
+  const host = anchor.closest('.card'); if (!host) return;
+  if (document.getElementById('autoFollowCard')) { renderAfLast(); return; }
+  const card = document.createElement('div'); card.className = 'card'; card.id = 'autoFollowCard'; card.style.marginTop = '18px';
+  card.innerHTML = '<div class="card-h"><h2>フォロワー数の自動取得</h2><span class="hint" id="afLast"></span></div>' +
+    '<div class="card-b">' +
+    '<div class="callout">登録済みのアカウントを、公式APIで自動的に一括取得します。<br>' +
+    '<b>Instagram プロアカウント</b>：管理情報→外部連携で Meta アクセストークンが必要（他アカウントも取得するには「Facebookログイン」方式）<br>' +
+    '<b>YouTube</b>：管理情報→外部連携で YouTube Data API キーが必要<br>' +
+    'その他（TikTok / X / Threads）は公式APIから未認証で取れないため、スクショから取り込んでください。</div>' +
+    '<div class="inline" style="margin-top:12px">' +
+    '<button type="button" class="btn primary" id="afRun">今すぐ全アカウント取得</button>' +
+    '<label class="inline" style="gap:6px;font-size:12.5px;color:var(--mori);margin-left:4px"><input type="checkbox" id="afAuto"' + ((DB.api && DB.api.autoFollowDaily) ? ' checked' : '') + '>アプリを開いた日に1回自動実行</label>' +
+    '</div>' +
+    '<div id="afMsg" style="margin-top:10px;font-size:12px"></div>' +
+    '</div>';
+  host.parentNode.insertBefore(card, host);
+  renderAfLast();
+  document.getElementById('afRun').onclick = () => autoFetchAllFollowers(true, false);
+  document.getElementById('afAuto').onchange = (e) => { DB.api = DB.api || {}; DB.api.autoFollowDaily = !!e.target.checked; save(); toast(e.target.checked ? '毎日1回自動実行を有効にしました' : '自動実行を無効にしました'); };
+}
+function renderAfLast() {
+  const el = document.getElementById('afLast'); if (!el) return;
+  const c = DB.api || {};
+  el.textContent = c.lastAutoFollow ? ('最終取得 ' + c.lastAutoFollow + (c.lastAutoFollowResult ? '（更新 ' + c.lastAutoFollowResult.updated + ' / 失敗 ' + c.lastAutoFollowResult.failed + '）' : '')) : 'まだ取得していません';
+}
+/* アプリ起動時：ユーザーが自動実行を有効にしていて、今日まだ実行していなければ silent で実行 */
+setTimeout(() => {
+  try {
+    const c = DB.api || {};
+    if (c.autoFollowDaily && c.lastAutoFollow !== ymd(TODAY)) {
+      autoFetchAllFollowers(false, true);
+    }
+  } catch (e) {}
+}, 3500);
 /* ---------- 端末間の自動同期（Cloudflare Worker + KV 方式） ---------- */
 let _applyingRemote = false, _pushT = null, _lastPush = '';
 function syncCfg() { DB.api = DB.api || {}; return DB.api; }
@@ -5576,7 +5764,7 @@ function sbStampLocal() {
   try { sbSyncSnap(); } catch (e) {}
 }
 const SB_VER = 'v3';
-const SB_BUILD = '20260922-1026Z';
+const SB_BUILD = '20260922-1031Z';
 function sbC() { DB.api = DB.api || {}; return DB.api; }
 function sbH(extra) { return Object.assign({ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, extra || {}); }
 async function sbFetch(path, opts) {
